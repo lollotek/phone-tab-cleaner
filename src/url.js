@@ -33,8 +33,12 @@ export function detectSearch(u) {
 export function isExcluded(u, patterns = []) {
   const host = u.hostname.toLowerCase().replace(/^www\./, '');
   const pathname = u.pathname.toLowerCase();
+  const port = u.port || (u.protocol === 'https:' ? '443' : '80');
   return patterns.some((p) => {
-    const [ph, ...rest] = p.toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').split('/');
+    const [hp, ...rest] = p.toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').split('/');
+    // "host:porta" (es. la pagina di `pck ui` su 127.0.0.1:4317) vale solo per quella porta.
+    const [ph, pp] = hp.split(':');
+    if (pp && pp !== port) return false;
     const prefix = rest.length ? `/${rest.join('/')}` : '';
     const hostOk = host === ph || host.endsWith(`.${ph}`);
     return hostOk && (!prefix || pathname === prefix || pathname.startsWith(prefix.endsWith('/') ? prefix : `${prefix}/`));

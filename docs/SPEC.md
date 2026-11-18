@@ -394,6 +394,37 @@ Principio comune: i comandi che **modificano** `links.md` toccano solo le righe 
   - Un dominio non trovato nel DNS può anche essere un problema temporaneo, quindi il messaggio lo indica come "dominio non trovato (DNS)" e non come "inesistente".
   - Difetti trovati e corretti durante la prova: un config salvato con **BOM UTF-8** (tipico di Blocco note/PowerShell) non veniva letto; un config non valido produceva uno stack trace invece di un messaggio.
 
+### 11.2 Viewer/editor HTML: `pck ui` (progetto, 2026-11-18)
+
+Sostituisce e amplia i punti F (`view`) e G (`open`) di §11.1.
+
+**Architettura.** `pck ui` avvia un server HTTP solo su `127.0.0.1` (porta libera o `--port`) e apre il browser. Una pagina statica non può scrivere `links.md`, usare adb o chiamare LM Studio, quindi il server espone un'API che riusa i moduli esistenti (`sync`, `retag`, `tags`, `check`, `close`, `backup`, `sources`). Il frontend è HTML, CSS e JavaScript senza framework né build, servito dal tool stesso: funziona offline.
+
+**Interfaccia** (mockup discusso in chat):
+- **Stato**: AI (provider e modello; verde se LM Studio risponde con un modello caricato o se la chiave per Claude/Gemini è presente), telefono (adb collegato/offline), Chrome PC (`DevToolsActivePort` presente). Aggiornato periodicamente.
+- **Funzioni**: Sync telefono, Sync PC (opzioni "con AI" e "chiudi schede"), Controlla (`check`, opzionale `--links`), Annulla ultima modifica. Le operazioni lunghe girano in background, con avanzamento in tempo reale (Server-Sent Events); una sola alla volta.
+- **Ricerca**: testo libero su titolo, URL e descrizione; `#tag` (più tag = tutti richiesti), `-#tag` per escludere; barra dei tag con conteggi (un clic filtra); filtri per sezione e "con problemi" (da `check`).
+- **Riga**: casella di selezione · link (titolo + dominio) · descrizione · tag · azioni: **elimina**, **modifica tag** (in linea, con suggerimenti dal vocabolario), **modifica descrizione** (in linea), **rigenera con AI** (come `retag` sulla singola voce), **apri sul telefono / sul PC** (intent `VIEW` via adb, `Target.createTarget` via CDP).
+- **Azioni sulla selezione**: aggiungi tag, togli tag, rigenera con AI, apri sul telefono/PC, elimina. "Seleziona tutti" agisce solo sui risultati filtrati.
+
+**Decisioni dell'utente** (2026-11-18):
+- **Eliminazione = cestino**: la riga viene spostata in `links-eliminati.md` (accanto a `links.md`, in una sezione con la data dell'eliminazione) e si può ripristinare dall'interfaccia. `sync` considera "già viste" anche le voci del cestino, quindi una scheda ancora aperta non viene salvata di nuovo; con `--close` viene chiusa come le altre.
+- Azioni di riga: elimina, modifica tag, **rigenera con AI, modifica descrizione, apri sul telefono/PC**.
+- **Sync con chiusura dall'interfaccia: sì, con conferma.** "Chiudi schede" è disattivata di default; prima di chiudere la pagina mostra quante schede verranno chiuse (anteprima) e chiede conferma.
+
+**Sicurezza e coerenza:**
+- Il server ascolta solo su `127.0.0.1`; ogni chiamata API richiede un token casuale generato all'avvio (passato nell'URL aperto nel browser, poi in un header) e si verifica `Origin`, così un altro sito aperto nel browser non può usare l'API.
+- Le voci sono identificate dall'**URL normalizzato** (unico: `check` segnala i doppioni), non dal numero di riga.
+- Ogni modifica porta la **versione** del file (hash) letta dalla pagina: se nel frattempo il file è cambiato (es. `pck sync` dal terminale), l'API risponde 409 e la pagina ricarica invece di sovrascrivere.
+- Tutte le scritture passano dalla scrittura atomica con backup a rotazione; "Annulla ultima modifica" ripristina l'ultimo backup (anch'esso con backup).
+
+**Piano** (un commit per fase):
+1. Operazioni sul file per URL: elimina (verso il cestino), ripristina, modifica tag e descrizione, aggiungi/togli tag in blocco, con controllo di versione; `sync` legge anche il cestino. Test.
+2. Server `pck ui`: file statici, API, token e `Origin`, stato di AI e sorgenti, operazioni lunghe con avanzamento (SSE). Test delle API.
+3. Pagina: elenco, ricerca e filtri, barra dei tag, editor in linea, selezione e azioni di massa.
+4. Funzioni dall'interfaccia: sync telefono/PC (con AI, chiusura con anteprima e conferma), controlla, rigenera, apri sul telefono/PC, annulla.
+5. Documentazione e prova completa sul file reale.
+
 Note:
 - B usa la stessa pipeline AI di `sync` (lotti, vocabolario, indicazioni, divisione dei lotti). La scrittura sostituisce le righe una per una e non riordina il file.
 - C `rename` con un nome già esistente equivale a `merge`. I tag riservati (`da-smistare`, `ricerca`) non si possono rinominare in un tag esistente senza `--force`.

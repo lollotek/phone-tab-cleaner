@@ -36,7 +36,7 @@ export async function closeSavedTabs({ source, cfg, log, keys, normalize, opts }
   const where = source.kind === 'pc' ? 'in Chrome sul PC' : 'sul telefono';
   return source.withTabs(async (dt) => {
     const tabs = await dt.listTabs();
-    const { close, keep } = selectTabsToClose(tabs, keys, { normalize, includeLocal: opts.includeLocal ?? cfg.includeLocal, exclude: cfg.exclude });
+    const { close, keep } = selectTabsToClose(tabs, keys, { normalize, includeLocal: opts.includeLocal ?? cfg.includeLocal, exclude: opts.exclude ?? cfg.exclude });
     if (!close.length) {
       log.ok('Nessuna scheda da chiudere.');
       return { closed: 0, failed: 0, kept: keep.length };

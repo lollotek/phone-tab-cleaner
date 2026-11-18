@@ -6,6 +6,7 @@ import { parseLinksFile, appendSection, renderSection } from './markdown.js';
 import { assignTags } from './tagger/rules.js';
 import { closeSavedTabs } from './close.js';
 import { describeWithAi, fetchAll, metaDescription } from './describe.js';
+import { trashKeys } from './store.js';
 import { cleanText, decodeEntities, formatHeading, readTextIfExists, shortPath, writeAtomic } from './util.js';
 
 const GENERIC_TITLES = new Set(['google image result', 'risultato immagine google', 'cerca con google', 'google search', 'untitled', 'senza titolo', 'home', 'loading…', 'loading...']);
@@ -50,6 +51,10 @@ async function pipeline({ cfg, adb, log, opts }, state) {
   const parsed = parseLinksFile(existing ?? '', normalize);
   if (existing !== null) log.ok(`File ${path.basename(file)}: ${parsed.entries.length} voci, ${parsed.tags.size} tag`);
   else if (!opts.urls) log.info(`File ${file} non presente: verrà creato.`);
+  // Voci eliminate dall'interfaccia (cestino): non vanno risalvate, ma con --close la scheda si chiude.
+  const trashed = await trashKeys(file, normalize);
+  // Esclusioni aggiuntive per questa esecuzione (es. la pagina di `pck ui` stessa).
+  const exclude = [...(cfg.exclude ?? []), ...(opts.extraExclude ?? [])];
 
   let tabs;
   let source;
@@ -63,11 +68,11 @@ async function pipeline({ cfg, adb, log, opts }, state) {
     log.ok(`${source.label}: ${tabs.length} schede`);
   }
 
-  const stats = { present: 0, dupSession: 0, skipped: {}, fetchErr: 0 };
+  const stats = { present: 0, trashed: 0, dupSession: 0, skipped: {}, fetchErr: 0 };
   const seen = new Set();
   const items = [];
   for (const tab of tabs) {
-    const c = classifyUrl(tab.url, { includeLocal: opts.includeLocal ?? cfg.includeLocal, exclude: cfg.exclude });
+    const c = classifyUrl(tab.url, { includeLocal: opts.includeLocal ?? cfg.includeLocal, exclude });
     if (c.skip) {
       stats.skipped[c.skip] = (stats.skipped[c.skip] ?? 0) + 1;
       log.debug(`ignorata (${c.skip}): ${tab.url}`);
@@ -76,6 +81,7 @@ async function pipeline({ cfg, adb, log, opts }, state) {
     const key = normalize(c.url);
     // In `describe` si elaborano anche i link già presenti (serve per provare regole e AI).
     if (parsed.keys.has(key) && !opts.urls) { stats.present++; continue; }
+    if (trashed.has(key) && !opts.urls) { stats.trashed++; log.debug(`nel cestino: ${tab.url}`); continue; }
     if (seen.has(key)) { stats.dupSession++; log.debug(`doppione: ${tab.url}`); continue; }
     seen.add(key);
     items.push({ tabId: tab.id, tabUrl: tab.url, url: c.url, key, search: c.search, unwrapped: c.unwrapped, tabTitle: cleanText(decodeEntities(tab.title ?? '')) });
@@ -83,13 +89,13 @@ async function pipeline({ cfg, adb, log, opts }, state) {
 
   const skippedTot = Object.values(stats.skipped).reduce((a, b) => a + b, 0);
   const skippedDetail = Object.entries(stats.skipped).map(([k, v]) => `${v} ${k}`).join(', ');
-  log.info(`  • ${items.length} nuove · ${stats.present} già presenti nel file · ${stats.dupSession} doppie tra le schede · ${skippedTot} ignorate${skippedTot ? ` (${skippedDetail})` : ''}`);
+  log.info(`  • ${items.length} nuove · ${stats.present} già presenti nel file${stats.trashed ? ` · ${stats.trashed} nel cestino` : ''} · ${stats.dupSession} doppie tra le schede · ${skippedTot} ignorate${skippedTot ? ` (${skippedDetail})` : ''}`);
 
-  // `--close`: dopo la scrittura (o in anteprima), chiude le schede il cui URL è nel file.
+  // `--close`: dopo la scrittura (o in anteprima), chiude le schede il cui URL è nel file o nel cestino.
   const maybeClose = async (keys) => {
     if (!opts.close || !source) return undefined;
     try {
-      return await closeSavedTabs({ source, cfg, log, keys, normalize, opts });
+      return await closeSavedTabs({ source, cfg, log, keys: new Set([...keys, ...trashed]), normalize, opts: { ...opts, exclude } });
     } catch (e) {
       log.error(`File salvato, ma chiusura delle schede non riuscita: ${e.message}`);
       log.info(`  ${source.retryHint}`);

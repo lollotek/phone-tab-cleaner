@@ -29,7 +29,11 @@ export const DEFAULTS = {
     'outlook.office.com',
     'teams.microsoft.com',
     'meet.google.com',
+    // La pagina di `pck ui` (porta predefinita): mai salvata né chiusa, anche con --include-local.
+    '127.0.0.1:4317',
+    'localhost:4317',
   ],
+  ui: { port: 4317, open: true },
   defaultSource: 'phone',
   pc: {
     // Cartella dati di Chrome (dove compare DevToolsActivePort); null = percorso standard del sistema.
