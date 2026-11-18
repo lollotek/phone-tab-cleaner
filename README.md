@@ -79,6 +79,32 @@ Una voce `host` vale anche per i sottodomini; `host/percorso` limita a un percor
 
 Per usare il PC come sorgente predefinita: `"defaultSource": "pc"` in `pck.config.json`. In alternativa ci si può collegare a un Chrome avviato con `--remote-debugging-port` (con una cartella dati separata), impostando `"pc": { "browserUrl": "http://127.0.0.1:9222" }`.
 
+## Interfaccia web (`pck ui`)
+
+```bash
+pck ui                    # avvia il server locale e apre il browser
+pck ui --no-open          # stampa solo l'indirizzo
+pck ui --port 4320 -f D:\note\links.md
+```
+
+L'interfaccia gira solo su `127.0.0.1`. L'indirizzo stampato contiene un token di accesso (`#t=…`) che cambia a ogni avvio; un'altra scheda va aperta con quell'indirizzo. Ctrl+C nel terminale la chiude.
+
+- **In alto**: lo stato di AI (provider e modello), del telefono e di Chrome sul PC, con i dettagli al passaggio del mouse.
+- **Funzioni**:
+  - **Sync telefono / Sync PC**, con le opzioni "con AI" e "chiudi schede salvate": prima della chiusura mostra quante schede verranno chiuse e chiede conferma;
+  - **Controlla**, anche con verifica dei link;
+  - **Annulla ultima**, che rimette il backup più recente;
+  - **Cestino**.
+
+  Le operazioni lunghe mostrano l'avanzamento, con il log completo sotto "Log".
+- **Ricerca**: testo libero; `#tag` filtra (più tag = tutti richiesti); `-#tag` esclude; `-parola` esclude un testo. Un clic su un tag lo aggiunge al filtro, Alt+clic lo esclude. `/` porta alla ricerca. Dopo "Controlla" compare il filtro "solo con problemi".
+- **Ogni voce**: modifica tag (con suggerimenti dai tag già usati; Invio salva, Esc annulla), modifica descrizione (Ctrl+Invio salva), rigenera con AI, apri sul telefono, apri in Chrome sul PC, elimina.
+- **Selezione multipla**: aggiungi tag, togli tag, rigenera con AI, apri sul telefono/PC, elimina. "Seleziona tutti i risultati" agisce solo sulle voci filtrate.
+- **Cestino**: le voci eliminate vanno in `links-eliminati.md` accanto a `links.md` e si possono ripristinare. `sync` non le salva di nuovo e, con la chiusura delle schede attiva, chiude anche le loro schede.
+- Ogni modifica passa dai backup in `.pck-backup/`. Se il file cambia altrove (es. `pck sync` dal terminale), la pagina si aggiorna invece di sovrascriverlo. Durante sync e rigenera le modifiche dalla pagina sono sospese.
+- La pagina stessa (`127.0.0.1:4317`) non viene mai salvata né chiusa dai sync.
+- Con la sorgente PC, Chrome chiede di approvare ogni collegamento: con "chiudi schede" le richieste sono due, una per l'anteprima e una per il sync.
+
 ## Rigenerare voci già salvate (`pck retag`)
 
 Rigenera descrizione e tag di voci già presenti nel file, con l'AI (default) o con le sole regole (`--no-ai`). Titolo e URL restano invariati e vengono riscritte solo le righe scelte.

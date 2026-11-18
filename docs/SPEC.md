@@ -418,6 +418,16 @@ Sostituisce e amplia i punti F (`view`) e G (`open`) di §11.1.
 - Ogni modifica porta la **versione** del file (hash) letta dalla pagina: se nel frattempo il file è cambiato (es. `pck sync` dal terminale), l'API risponde 409 e la pagina ricarica invece di sovrascrivere.
 - Tutte le scritture passano dalla scrittura atomica con backup a rotazione; "Annulla ultima modifica" ripristina l'ultimo backup (anch'esso con backup).
 
+**Stato: implementato** (2026-11-18, commit `fb44144`, `aab48df`, `db4cf2d`).
+- Codice: `src/store.js` (operazioni per URL, versione, cestino, annulla), `src/ui/server.js` (HTTP, API, sicurezza, operazioni), `src/ui/jobs.js` (operazioni in background + SSE), `src/ui/status.js` (stato senza effetti: nessuna connessione adb nuova, nessuna connessione CDP; per il PC solo `DevToolsActivePort` e porta aperta), `src/ui/public/` (pagina).
+- API (`x-pck-token`): `GET /api/state`, `GET /api/status`, `GET /api/events` (SSE, `?token=`), `GET|POST /api/jobs` (`sync`, `close-preview`, `retag`, `check`, `open`), `POST /api/entries/{update,tags,delete}`, `GET /api/trash`, `POST /api/trash/restore`, `POST /api/undo`. Codici: 401 token, 403 Host/Origin, 409 conflitto di versione, 423 operazione in corso.
+- Esclusione della pagina stessa (richiesta dell'utente): gli esclusi accettano `host:porta`; di default `127.0.0.1:4317` e `localhost:4317`. Se la porta è occupata e se ne usa un'altra, quella viene esclusa per i sync lanciati dalla pagina.
+- Anteprima della chiusura: dopo il sync ogni scheda non ignorata è nel file (nuova, già presente o nel cestino), quindi il numero da chiudere è quello delle schede non ignorate; la chiusura vera rilegge comunque le schede (§6.5).
+- Test: `test/store.test.js`, `test/ui-server.test.js` (server vero su porta libera: token, Origin, Host, conflitti, cestino, ripristino, annulla, operazione `check` con SSE). 65 test totali.
+- **Prova nel browser** (su una copia di `links.md`, porta 4318): stato (AI gemma, telefono offline, Chrome PC pronto); ricerca `#maker -#shopping cnc` (3 di 208); modifica tag con suggerimenti; selezione di tutti i risultati + aggiungi tag (5 voci); eliminazione di 2 voci → cestino → ripristino di 1; Controlla (0 errori); rigenera con AI di una voce (LM Studio); modifica descrizione con `<b>` mostrato come testo (escaping); apri sul telefono con telefono offline → errore leggibile.
+  - Difetti trovati e corretti: Invio nei dialoghi attivava "Annulla" (primo pulsante del form); un'operazione breve poteva concludersi prima che la pagina la attendesse (evento `end` prima della risposta di avvio), lasciando la pagina "in corso"; riaprire l'indirizzo con un nuovo token nella stessa scheda (cambia solo `#`) non ricaricava la pagina.
+  - **Non provati dalla pagina**: Sync telefono/PC e la chiusura (telefono offline; sul PC servirebbe l'approvazione in Chrome e chiuderebbe schede reali), apri sul PC.
+
 **Piano** (un commit per fase):
 1. Operazioni sul file per URL: elimina (verso il cestino), ripristina, modifica tag e descrizione, aggiungi/togli tag in blocco, con controllo di versione; `sync` legge anche il cestino. Test.
 2. Server `pck ui`: file statici, API, token e `Origin`, stato di AI e sorgenti, operazioni lunghe con avanzamento (SSE). Test delle API.
