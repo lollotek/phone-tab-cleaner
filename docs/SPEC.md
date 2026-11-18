@@ -379,6 +379,11 @@ Principio comune: i comandi che **modificano** `links.md` toccano solo le righe 
 | F | `pck view` | Genera un file **derivato** (es. `links-per-tag.md`, o una pagina HTML con ricerca e filtri per tag) senza toccare `links.md`. | Opzionale |
 | G | `pck open` | L'inverso di `--close`: riapre sul telefono o sul PC i link con un tag o di una sezione (`Target.createTarget` sul PC, intent `VIEW` via adb sul telefono). | Opzionale |
 
+**Stato M4** (2026-11-18): repository git creato (commit iniziale `0efd694`, `links.md` incluso, `.pck-backup/` escluso).
+- **A – fatto** (`fd8dece`): `src/backup.js`, test in `test/backup.test.js`.
+- **B – fatto**: `pck retag` (`src/retag.js`). La logica AI comune a `sync` e `retag` è stata spostata in `src/describe.js`; il rilevamento della lingua è in `src/lang.js`; le funzioni per lavorare riga per riga (`entryLines`, `replaceLines`, `replaceTrailingTags`) sono in `src/markdown.js`.
+  - Prova su una **copia** di `links.md` (`--tag da-smistare --empty --lang-mismatch`): 50 voci selezionate (49 della sezione 14/11), 50/50 rigenerate con LM Studio in 67 s, 50 righe cambiate e nessun'altra, 0 `#da-smistare` rimasti, backup creato. Il `links.md` reale non è stato modificato.
+
 Note:
 - B usa la stessa pipeline AI di `sync` (lotti, vocabolario, indicazioni, divisione dei lotti). La scrittura sostituisce le righe una per una e non riordina il file.
 - C `rename` con un nome già esistente equivale a `merge`. I tag riservati (`da-smistare`, `ricerca`) non si possono rinominare in un tag esistente senza `--force`.

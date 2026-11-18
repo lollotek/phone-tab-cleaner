@@ -3,28 +3,10 @@ import pc from 'picocolors';
 import { openSource } from './sources/index.js';
 import { classifyUrl, cleanUrl, normalizeUrl, titleFromUrl } from './url.js';
 import { parseLinksFile, appendSection, renderSection } from './markdown.js';
-import { fetchMetadata } from './metadata.js';
-import { assignTags, slugTag } from './tagger/rules.js';
-import { createProvider, enrichWithAi, tagsInInstructions } from './tagger/ai/index.js';
-import { USER_DIR } from './config.js';
+import { assignTags } from './tagger/rules.js';
 import { closeSavedTabs } from './close.js';
-import { PckError } from './errors.js';
-
-/**
- * File di indicazioni per l'AI: percorso esplicito (--instructions / ai.instructionsFile), cercato
- * nella cartella corrente e poi in ~/.pck/. Un percorso indicato esplicitamente ma inesistente è un errore.
- */
-async function loadInstructions(name, { explicit = false } = {}) {
-  if (!name) return null;
-  const candidates = path.isAbsolute(name) ? [name] : [path.resolve(name), path.join(USER_DIR, path.basename(name))];
-  for (const file of candidates) {
-    const text = await readTextIfExists(file);
-    if (text !== null) return { file, text };
-  }
-  if (explicit) throw new PckError(`File di indicazioni non trovato: ${name}`);
-  return null;
-}
-import { cleanText, decodeEntities, formatHeading, mapLimit, readTextIfExists, shortPath, truncate, writeAtomic } from './util.js';
+import { describeWithAi, fetchAll, metaDescription } from './describe.js';
+import { cleanText, decodeEntities, formatHeading, readTextIfExists, shortPath, writeAtomic } from './util.js';
 
 const GENERIC_TITLES = new Set(['google image result', 'risultato immagine google', 'cerca con google', 'google search', 'untitled', 'senza titolo', 'home', 'loading…', 'loading...']);
 
@@ -46,10 +28,8 @@ function chooseTitle(it) {
 
 function chooseDescription(it, title, maxLength) {
   if (it.search) return it.search.q ? `Ricerca web su ${it.search.engine}: "${it.search.q}".` : `Ricerca web su ${it.search.engine}.`;
-  const d = cleanText(it.meta?.description ?? '');
-  // Descrizioni che non aggiungono nulla al titolo (es. "RoughcutMYOG", "FindMyWeb").
-  if (!d || title.toLowerCase().includes(d.toLowerCase())) return '';
-  return truncate(d, maxLength);
+  // Descrizioni che non aggiungono nulla al titolo (es. "RoughcutMYOG", "FindMyWeb") vengono scartate.
+  return metaDescription(it.meta, title, maxLength);
 }
 
 /** Pipeline completa di `pck sync` (SPEC §6). La sorgente (telefono o PC) viene sempre rilasciata alla fine. */
@@ -124,20 +104,7 @@ async function pipeline({ cfg, adb, log, opts }, state) {
     return { file, items, stats, written: false, closed };
   }
 
-  if (opts.fetch !== false) {
-    const toFetch = items.filter((i) => !i.search);
-    let done = 0;
-    await mapLimit(toFetch, Number(opts.concurrency ?? cfg.fetch.concurrency), async (it) => {
-      it.meta = await fetchMetadata(it.url, cfg.fetch);
-      if (!it.meta.ok) {
-        stats.fetchErr++;
-        log.debug(`metadati non disponibili (${it.meta.error}): ${it.url}`);
-      }
-      if (process.stderr.isTTY) process.stderr.write(`\r  metadati ${++done}/${toFetch.length}`);
-    });
-    if (process.stderr.isTTY) process.stderr.write('\r\x1b[K');
-    log.ok(`Metadati scaricati (${toFetch.length - stats.fetchErr}/${toFetch.length}${stats.fetchErr ? `, ${stats.fetchErr} non disponibili → senza descrizione` : ''})`);
-  }
+  if (opts.fetch !== false) stats.fetchErr = await fetchAll(items.filter((i) => !i.search), { cfg, opts, log });
 
   for (const it of items) {
     it.title = chooseTitle(it);
@@ -145,46 +112,9 @@ async function pipeline({ cfg, adb, log, opts }, state) {
   }
 
   // ── AI (opzionale): descrizione + tag; i link senza risultato usano le regole ──
-  let aiResults = new Map();
-  if (opts.ai) {
-    const name = opts.ai === true ? cfg.ai.defaultProvider : opts.ai;
-    const provider = await createProvider(name, cfg.ai, { model: opts.model });
-    const pcfg = cfg.ai.providers[name] ?? {};
-    const aiItems = items.filter((i) => !i.search);
-    // Vocabolario: tag del file + tag previsti dalle regole (come suggerimenti), per coerenza fin dal primo uso.
-    const vocabulary = new Map(parsed.tags);
-    for (const list of [...Object.values(cfg.tagRules.domains ?? {}), ...Object.values(cfg.tagRules.keywords ?? {})]) {
-      for (const t of list) if (!vocabulary.has(t)) vocabulary.set(t, 0);
-    }
-    // Tag "di servizio": il ripiego e quello delle pagine di ricerca (che l'AI scambierebbe per "ricerca scientifica").
-    const reserved = [cfg.tagRules.fallbackTag, cfg.tagRules.searchTag].filter(Boolean).map(slugTag);
-    // Indicazioni personali per l'AI (es. "se c'è cosplay aggiungi #cosplay"): file di testo libero.
-    const instr = await loadInstructions(opts.instructions ?? cfg.ai.instructionsFile, { explicit: Boolean(opts.instructions) });
-    if (instr) {
-      log.info(`  Indicazioni AI: ${instr.file}`);
-      for (const t of tagsInInstructions(instr.text)) if (!vocabulary.has(t)) vocabulary.set(t, 0);
-    }
-    reserved.forEach((t) => vocabulary.delete(t));
-    log.info(`  AI: ${provider.name} · modello ${provider.model} · ${aiItems.length} link in lotti da ${pcfg.batchSize ?? 10}`);
-    const t0 = Date.now();
-    aiResults = await enrichWithAi(
-      aiItems.map((it) => ({ ref: it, url: it.url, title: it.title, description: it.meta?.description, keywords: it.meta?.keywords, excerpt: it.meta?.excerpt })),
-      {
-        provider,
-        vocabulary,
-        language: opts.lang ?? cfg.description.language,
-        maxTags: cfg.tagRules.maxTags,
-        maxLength: cfg.description.maxLength,
-        batchSize: Number(pcfg.batchSize ?? 10),
-        excerptChars: cfg.ai.excerptChars,
-        aliases: cfg.tagRules.aliases,
-        instructions: instr?.text,
-        log,
-      },
-    );
-    aiResults = new Map([...aiResults].map(([k, v]) => [k.ref, { ...v, tags: v.tags.filter((t) => !reserved.includes(t)) }]));
-    log.ok(`AI: ${aiResults.size}/${aiItems.length} link elaborati in ${Math.round((Date.now() - t0) / 1000)} s${aiResults.size < aiItems.length ? ` (${aiItems.length - aiResults.size} con regole)` : ''}`);
-  }
+  const aiResults = opts.ai
+    ? await describeWithAi(items.filter((i) => !i.search), { cfg, opts, log, fileTags: parsed.tags })
+    : new Map();
 
   const newTags = new Set();
   const entries = items.map((it) => {

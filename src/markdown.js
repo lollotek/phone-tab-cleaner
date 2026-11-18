@@ -55,6 +55,50 @@ export function renderSection(heading, entries) {
   return `## ${heading}\n\n${entries.map(renderEntry).join('\n')}\n`;
 }
 
+/**
+ * Voci del file con posizione e sezione di appartenenza (per le modifiche riga per riga).
+ * @returns {{index:number, section:string|null, line:string, entry:{title,url,description,tags}}[]}
+ */
+export function entryLines(text) {
+  const out = [];
+  let section = null;
+  text.split(/\r?\n/).forEach((line, index) => {
+    const h = /^##\s+(.+?)\s*$/.exec(line);
+    if (h) section = h[1];
+    const m = ENTRY_RE.exec(line);
+    if (!m) return;
+    let rest = m.groups.rest;
+    const tags = [];
+    const t = TRAILING_TAGS_RE.exec(rest);
+    if (t) {
+      for (const [, tag] of t[1].matchAll(TAG_RE)) tags.push(tag.toLowerCase());
+      rest = rest.slice(0, t.index);
+    }
+    const description = rest.replace(/^\s*(?:—|–|-|:)\s*/, '').trim();
+    out.push({ index, section, line, entry: { title: m.groups.title, url: m.groups.url, description, tags } });
+  });
+  return out;
+}
+
+/**
+ * Sostituisce singole righe del testo (indice → nuova riga), mantenendo gli a capo originali (LF o CRLF).
+ */
+export function replaceLines(text, replacements) {
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const lines = text.split(/\r?\n/);
+  for (const [index, line] of replacements) lines[index] = line;
+  return lines.join(eol);
+}
+
+/** Cambia solo i tag finali di una riga, lasciando intatto tutto il resto (anche le righe scritte a mano). */
+export function replaceTrailingTags(line, tags) {
+  const m = ENTRY_RE.exec(line);
+  if (!m) return line;
+  const t = TRAILING_TAGS_RE.exec(line);
+  const head = (t ? line.slice(0, t.index) : line).replace(/\s+$/, '');
+  return tags.length ? `${head} ${tags.map((x) => `#${x}`).join(' ')}` : head;
+}
+
 /** Aggiunge una sezione in fondo al file, senza toccare il resto. */
 export function appendSection(text, heading, entries) {
   let base = text && text.trim() ? text : FILE_HEADER;

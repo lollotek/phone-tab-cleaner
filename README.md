@@ -79,6 +79,19 @@ Una voce `host` vale anche per i sottodomini; `host/percorso` limita a un percor
 
 Per usare il PC come sorgente predefinita: `"defaultSource": "pc"` in `pck.config.json`. In alternativa ci si può collegare a un Chrome avviato con `--remote-debugging-port` (con una cartella dati separata), impostando `"pc": { "browserUrl": "http://127.0.0.1:9222" }`.
 
+## Rigenerare voci già salvate (`pck retag`)
+
+Rigenera descrizione e tag di voci già presenti nel file, con l'AI (default) o con le sole regole (`--no-ai`). Titolo e URL restano invariati e vengono riscritte solo le righe scelte.
+
+```bash
+pck retag --tag da-smistare --dry-run          # anteprima prima/dopo
+pck retag --tag da-smistare --empty --lang-mismatch
+pck retag --all --section 2026-11-14           # tutta una sezione
+pck retag --all --url github.com --ai claude
+```
+
+Filtri sui problemi (basta che una voce ne soddisfi uno): `--tag <tag>`, `--empty` (senza descrizione), `--lang-mismatch` (descrizione non nella lingua configurata; riconosce italiano e inglese), `--all`. Filtri sull'ambito (devono valere tutti): `--section <titolo>`, `--url <testo>`, `--limit <n>`. Le pagine di ricerca non vengono rigenerate. Se l'AI non riesce su una voce, quella voce resta com'è.
+
 ## Backup
 
 Prima di ogni modifica di `links.md` il tool ne salva una copia in `.pck-backup/` (es. `links-20261118-101500.md`) e conserva le ultime 10. Il numero si cambia con `"backup": { "keep": 20 }` nel config. Per ripristinare basta copiare il backup al posto di `links.md`; se la cartella è sotto git, si può usare anche `git checkout links.md`.

@@ -6,6 +6,7 @@ import { openSource } from '../src/sources/index.js';
 import { loadConfig, USER_CONFIG, LOCAL_CONFIG } from '../src/config.js';
 import { createLogger } from '../src/log.js';
 import { runSync } from '../src/sync.js';
+import { runRetag } from '../src/retag.js';
 import { PROVIDERS } from '../src/tagger/ai/index.js';
 import { cleanText, decodeEntities } from '../src/util.js';
 
@@ -128,6 +129,30 @@ program
       opts.ai = true;
     }
     await runSync({ cfg, adb, log, opts: { ...opts, urls, dryRun: true } });
+  }));
+
+const collect = (v, acc) => [...acc, ...v.split(',').map((s) => s.trim()).filter(Boolean)];
+
+program
+  .command('retag')
+  .description('rigenera descrizione e tag di voci già presenti nel file (titolo e URL invariati)')
+  .option('-f, --file <path>', 'file markdown (default: config defaultFile)')
+  .option('--tag <tag>', 'voci con questo tag (ripetibile o separato da virgole)', collect, [])
+  .option('--empty', 'voci senza descrizione')
+  .option('--lang-mismatch', 'voci con la descrizione in un\'altra lingua (riconosce italiano/inglese)')
+  .option('--all', 'tutte le voci (nell\'ambito di --section / --url)')
+  .option('--section <titolo>', 'solo la sezione indicata (es. "2026-11-14")')
+  .option('--url <testo>', 'solo le voci il cui URL contiene il testo')
+  .option('--limit <n>', 'al massimo n voci')
+  .option('--ai [provider]', 'provider AI: local | claude | gemini (default da config)')
+  .option('--no-ai', 'usa solo le regole (metadati + tagRules)')
+  .option('--model <nome>', 'modello del provider AI')
+  .option('--lang <codice>', 'lingua delle descrizioni (default: it)')
+  .option('--instructions <file>', 'indicazioni personali per l\'AI (default: pck.prompt.md)')
+  .option('--no-fetch', 'non scaricare le pagine (solo titolo e URL)')
+  .option('--dry-run', 'mostra prima/dopo senza modificare il file')
+  .action(action(async ({ cfg, log }, opts) => {
+    await runRetag({ cfg, log, opts });
   }));
 
 program
