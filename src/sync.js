@@ -24,7 +24,7 @@ async function loadInstructions(name, { explicit = false } = {}) {
   if (explicit) throw new PckError(`File di indicazioni non trovato: ${name}`);
   return null;
 }
-import { cleanText, decodeEntities, formatHeading, mapLimit, readTextIfExists, truncate, writeAtomic } from './util.js';
+import { cleanText, decodeEntities, formatHeading, mapLimit, readTextIfExists, shortPath, truncate, writeAtomic } from './util.js';
 
 const GENERIC_TITLES = new Set(['google image result', 'risultato immagine google', 'cerca con google', 'google search', 'untitled', 'senza titolo', 'home', 'loading…', 'loading...']);
 
@@ -206,8 +206,9 @@ async function pipeline({ cfg, adb, log, opts }, state) {
     log.info(pc.yellow(`\n[dry-run] ${entries.length} voci NON scritte in ${file}`));
     savedKeys = new Set([...parsed.keys, ...items.map((i) => i.key)]);
   } else {
-    await writeAtomic(file, appendSection(existing ?? '', heading, entries), { backup: existing !== null });
+    const saved = await writeAtomic(file, appendSection(existing ?? '', heading, entries), { backup: cfg.backup });
     log.ok(`Scritte ${entries.length} voci in ${path.basename(file)} (sezione "${heading}")`);
+    if (saved) log.info(`  Backup: ${shortPath(saved)}`);
     // Fonte di verità per la chiusura: il file come è stato effettivamente scritto.
     savedKeys = parseLinksFile((await readTextIfExists(file)) ?? '', normalize).keys;
   }

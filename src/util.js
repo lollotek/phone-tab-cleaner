@@ -1,5 +1,13 @@
 import fs from 'node:fs/promises';
+import path from 'node:path';
 import { PckError, EXIT } from './errors.js';
+import { backupFile } from './backup.js';
+
+/** Percorso breve per i messaggi: relativo alla cartella corrente se ci sta dentro. */
+export const shortPath = (p) => {
+  const rel = path.relative(process.cwd(), p);
+  return rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? rel : p;
+};
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -49,13 +57,17 @@ export async function readTextIfExists(file) {
   }
 }
 
-/** Scrittura atomica: backup .bak dell'originale, file temporaneo, rename. */
-export async function writeAtomic(file, text, { backup = true } = {}) {
+/**
+ * Scrittura atomica: backup a rotazione dell'originale (se `backup` è un oggetto {dir, keep}), file temporaneo, rename.
+ * @returns {Promise<string|null>} percorso del backup creato
+ */
+export async function writeAtomic(file, text, { backup } = {}) {
   try {
-    if (backup) await fs.copyFile(file, `${file}.bak`).catch((e) => { if (e.code !== 'ENOENT') throw e; });
+    const saved = backup ? await backupFile(file, backup) : null;
     const tmp = `${file}.tmp-${process.pid}`;
     await fs.writeFile(tmp, text, 'utf8');
     await fs.rename(tmp, file);
+    return saved;
   } catch (e) {
     throw new PckError(`Impossibile scrivere ${file}: ${e.message}`, EXIT.FILE);
   }

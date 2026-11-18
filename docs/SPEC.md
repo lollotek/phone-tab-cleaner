@@ -139,7 +139,7 @@ Un unico file, una sezione `##` per ogni sync, con le voci aggiunte in fondo al 
 - Il titolo viene ripulito da `[`, `]`, e dagli a capo. Dall'URL vengono tolti solo i parametri di tracciamento (`writeCleanUrls`); non viene normalizzato oltre, per non rompere i link.
 - Se la descrizione manca: `- [Titolo](URL) #tag`.
 - Il file può contenere **altro testo scritto a mano**: il parser legge solo le righe che rispettano il formato, ignora il resto e non lo modifica mai.
-- La scrittura è atomica (file temporaneo + rename) e prima viene creato un backup `links.md.bak`.
+- La scrittura è atomica (file temporaneo + rename). Prima di ogni modifica viene creato un **backup a rotazione** in `.pck-backup/` accanto al file (`links-AAAAMMGG-HHMMSS.md`, suffisso `-2`, `-3`… se nello stesso secondo), conservando gli ultimi `backup.keep` (default 10). Implementato in M4-A (`src/backup.js`); prima c'era un unico `links.md.bak` sovrascritto a ogni scrittura.
 
 ### Lettura del file esistente (riferimento)
 Il parser estrae da ogni voce:

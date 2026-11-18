@@ -10,6 +10,8 @@ export const LOCAL_CONFIG = 'pck.config.json';
 export const DEFAULTS = {
   adbPath: 'D:\\programmi\\scrcpy-win64-v3.3.4\\adb.exe',
   defaultFile: './links.md',
+  // Prima di ogni modifica di links.md: copia in <cartella del file>/<dir>, conservando le ultime `keep`.
+  backup: { dir: '.pck-backup', keep: 10 },
   lastDevice: null,
   chromePackage: 'com.android.chrome',
   chromeActivity: 'com.google.android.apps.chrome.Main',

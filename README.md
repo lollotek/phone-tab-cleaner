@@ -79,6 +79,10 @@ Una voce `host` vale anche per i sottodomini; `host/percorso` limita a un percor
 
 Per usare il PC come sorgente predefinita: `"defaultSource": "pc"` in `pck.config.json`. In alternativa ci si può collegare a un Chrome avviato con `--remote-debugging-port` (con una cartella dati separata), impostando `"pc": { "browserUrl": "http://127.0.0.1:9222" }`.
 
+## Backup
+
+Prima di ogni modifica di `links.md` il tool ne salva una copia in `.pck-backup/` (es. `links-20261118-101500.md`) e conserva le ultime 10. Il numero si cambia con `"backup": { "keep": 20 }` nel config. Per ripristinare basta copiare il backup al posto di `links.md`; se la cartella è sotto git, si può usare anche `git checkout links.md`.
+
 ## Configurazione
 
 Le regole per i tag (dominio → tag, parole chiave → tag, alias), i parametri di tracciamento da ignorare e il percorso di adb si personalizzano in `pck.config.json` nella cartella corrente, oppure in `%USERPROFILE%\.pck\config.json`. I valori di default sono in [src/config.js](src/config.js); basta indicare le chiavi da cambiare, ad esempio:
