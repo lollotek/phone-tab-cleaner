@@ -12,6 +12,7 @@
   }
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { margin: 0 auto; max-width: 1100px; padding: 16px; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.45; }
 button, input, select, textarea { font: inherit; color: inherit; }
 button { background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); padding: 5px 11px; cursor: pointer; white-space: nowrap; }
@@ -101,5 +102,11 @@ details.box { border: 1px solid var(--border); border-radius: var(--radius); pad
 details.box summary { cursor: pointer; color: var(--muted); }
 .pill.click { cursor: pointer; }
 .pill.click:hover { outline: 1px solid var(--border-strong); }
-dialog { width: min(600px, calc(100vw - 32px)); }
+dialog { width: min(600px, calc(100vw - 32px)); overflow-x: hidden; }
+.form select, .form input { min-width: 0; }
+.form .inline > select, .form .inline > input[type=text] { flex: 1 1 160px; }
+@media (max-width: 560px) {
+  .form { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .form label.k { margin-top: 6px; }
+}
 @media (max-width: 640px) { .row { grid-template-columns: 22px minmax(0, 1fr); } .acts { grid-column: 2; } }

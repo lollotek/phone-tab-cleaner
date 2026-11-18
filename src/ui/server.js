@@ -18,7 +18,9 @@ import { runSync } from '../sync.js';
 import { runRetag } from '../retag.js';
 import { openSource } from '../sources/index.js';
 import { resolveDevice } from '../adb.js';
-import { loadConfig } from '../config.js';
+import { loadConfig, saveConfigPatch } from '../config.js';
+import { describeWithAi } from '../describe.js';
+import { aiSettingsView, applyToConfig, listLocalModels, sanitizeAiSettings, withSettings } from './ai-settings.js';
 import {
   EXIT_CONFLICT, editTagsInText, fileVersion, moveToTrash, mutate, purgeFromTrash, readTrash, restoreFromTrash, trashPath, undoLast, updateInText,
 } from '../store.js';
@@ -76,7 +78,7 @@ export function openBrowser(url) {
  * Crea il server (senza avviarlo). Separato da startUi per i test.
  * @returns {{server: http.Server, token: string, setPort(port:number): void}}
  */
-export function createUiServer({ cfg, adb, log, file }) {
+export function createUiServer({ cfg, adb, log, file, saveConfig = saveConfigPatch }) {
   const token = crypto.randomBytes(18).toString('base64url');
   const normalize = (u) => normalizeUrl(u, cfg.normalize);
   const jobs = createJobRunner();
@@ -182,6 +184,20 @@ export function createUiServer({ cfg, adb, log, file }) {
         return { issues: withKeys, errors, warnings: issues.length - errors };
       },
     },
+    'ai-test': {
+      writes: false,
+      label: () => 'Prova AI su un link di esempio',
+      run: async (b, jlog) => {
+        // Impostazioni del modulo (anche non salvate): config temporaneo, quello del server non cambia.
+        const tmp = b.settings ? withSettings(cfg, sanitizeAiSettings(b.settings, cfg)) : cfg;
+        const item = { url: 'https://example.com/', title: 'Example Domain', meta: { description: 'This domain is for use in documentation examples without needing permission.' } };
+        const t0 = Date.now();
+        const res = await describeWithAi([item], { cfg: tmp, opts: { ai: tmp.ai.defaultProvider }, log: jlog, fileTags: new Map() });
+        const r = res.get(item);
+        if (!r) throw new PckError('Il modello non ha restituito una risposta valida: guarda il log.');
+        return { provider: tmp.ai.defaultProvider, description: r.description, tags: r.tags, ms: Date.now() - t0 };
+      },
+    },
     connect: {
       writes: false,
       label: (b) => `Connessione al telefono ${b.serial ?? ''}`.trim(),
@@ -235,6 +251,16 @@ export function createUiServer({ cfg, adb, log, file }) {
     'GET /api/state': () => state(),
     'GET /api/status': (_b, url) => getStatus({ force: url.searchParams.has('force') }),
     'GET /api/jobs': () => jobs.state(),
+    'GET /api/ai': () => aiSettingsView(cfg),
+    'GET /api/ai/models': (_b, url) => listLocalModels(url.searchParams.get('baseUrl') ?? cfg.ai.providers?.local?.baseUrl ?? '').then((models) => ({ models })),
+    'POST /api/ai': async (b) => {
+      if (jobs.current) throw new PckError(`Operazione in corso (${jobs.current.label}): attendi che finisca.`, LOCKED);
+      const patch = sanitizeAiSettings(b, cfg);
+      const savedTo = saveConfig(patch);
+      applyToConfig(cfg, patch);
+      await getStatus({ force: true });
+      return { settings: aiSettingsView(cfg), savedTo };
+    },
     'GET /api/phone': async () => {
       let devices = [];
       try { devices = await adb.devices(); } catch (e) { return { devices, lastDevice: cfg.lastDevice ?? null, error: e.message.split('\n')[0] }; }

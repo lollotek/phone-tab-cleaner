@@ -428,6 +428,15 @@ Sostituisce e amplia i punti F (`view`) e G (`open`) di §11.1.
   - Difetti trovati e corretti: Invio nei dialoghi attivava "Annulla" (primo pulsante del form); un'operazione breve poteva concludersi prima che la pagina la attendesse (evento `end` prima della risposta di avvio), lasciando la pagina "in corso"; riaprire l'indirizzo con un nuovo token nella stessa scheda (cambia solo `#`) non ricaricava la pagina.
   - **Non provati dalla pagina**: Sync telefono/PC e la chiusura (telefono offline; sul PC servirebbe l'approvazione in Chrome e chiuderebbe schede reali), apri sul PC.
 
+**Aggiunte (2026-11-18, richieste dell'utente):**
+- **Eliminazione definitiva dal cestino** (`b8fd16e`): `POST /api/trash/purge`, pulsante per riga e per la selezione nella vista Cestino, con conferma. Resta il backup del cestino in `.pck-backup/`.
+- **Finestra Sync telefono** (`8bf8d42`): IP e porta precompilati (dispositivo collegato o `lastDevice` riletto dal config), dispositivi visti da adb cliccabili, "Verifica connessione" (operazione `connect`), primo abbinamento (operazione `pair`, codice di 6 cifre), opzioni con AI / chiudi schede. L'indirizzo (`serial`) è validato prima di avviare qualsiasi operazione (400). `GET /api/phone`.
+- **Impostazioni AI** (clic sull'indicatore AI): `GET /api/ai`, `GET /api/ai/models` (modelli del server locale, con quello caricato in LM Studio), `POST /api/ai` (validazione in `src/ui/ai-settings.js`, salvataggio con `saveConfigPatch`, applicazione immediata al config in memoria e allo stato) e l'operazione `ai-test` (descrive un link di esempio con le impostazioni del modulo, senza salvarle). Le chiavi API non passano dall'interfaccia: si mostra solo se le variabili d'ambiente sono impostate.
+- Prova nel browser (copia del file, server avviato da una cartella con il proprio `pck.config.json`):
+  - finestra telefono: precompilata con `192.168.1.2:42909`; verifica con il telefono offline → errore mostrato nella finestra; porta vuota → "Indica sia IP sia porta", finestra aperta;
+  - finestra AI: 7 modelli da LM Studio (gemma indicato come caricato); il cambio di provider mostra i campi giusti e lo stato della chiave; "Prova" → risposta in 1,8 s; salvataggio (lingua `en`) nel config della cartella di prova, config utente invariato.
+  - Corretto durante la prova: a larghezza ridotta (~400 px) la finestra AI aveva campi schiacciati e scorrimento orizzontale.
+
 **Piano** (un commit per fase):
 1. Operazioni sul file per URL: elimina (verso il cestino), ripristina, modifica tag e descrizione, aggiungi/togli tag in blocco, con controllo di versione; `sync` legge anche il cestino. Test.
 2. Server `pck ui`: file statici, API, token e `Origin`, stato di AI e sorgenti, operazioni lunghe con avanzamento (SSE). Test delle API.

@@ -90,6 +90,12 @@ pck ui --port 4320 -f D:\note\links.md
 L'interfaccia gira solo su `127.0.0.1`. L'indirizzo stampato contiene un token di accesso (`#t=…`) che cambia a ogni avvio; un'altra scheda va aperta con quell'indirizzo. Ctrl+C nel terminale la chiude.
 
 - **In alto**: lo stato di AI (provider e modello), del telefono e di Chrome sul PC, con i dettagli al passaggio del mouse.
+- **Impostazioni AI** (clic sull'indicatore AI):
+  - scelta del provider (locale, Claude, Gemini) e dei parametri: server e modello locale, con l'elenco dei modelli di LM Studio e quello caricato; ragionamento; link per richiesta; modello ed effort di Claude; modello e variabile della chiave di Gemini; lingua delle descrizioni;
+  - "Prova su un link di esempio" verifica le impostazioni prima di salvarle;
+  - si salvano nel config (`./pck.config.json` se esiste, altrimenti `~/.pck/config.json`) e valgono anche per i comandi da terminale;
+  - le chiavi API si leggono solo dalle variabili d'ambiente: la finestra indica se sono impostate.
+- **Sync telefono** apre una finestra con IP e porta: sono precompilati dal dispositivo collegato o dall'ultimo indirizzo usato, e quelli visti da adb si scelgono con un clic. Ci sono anche "Verifica connessione", le opzioni con AI / chiudi schede e, per la prima volta, l'abbinamento con porta e codice.
 - **Funzioni**:
   - **Sync telefono / Sync PC**, con le opzioni "con AI" e "chiudi schede salvate": prima della chiusura mostra quante schede verranno chiuse e chiede conferma;
   - **Controlla**, anche con verifica dei link;
@@ -100,7 +106,7 @@ L'interfaccia gira solo su `127.0.0.1`. L'indirizzo stampato contiene un token d
 - **Ricerca**: testo libero; `#tag` filtra (più tag = tutti richiesti); `-#tag` esclude; `-parola` esclude un testo. Un clic su un tag lo aggiunge al filtro, Alt+clic lo esclude. `/` porta alla ricerca. Dopo "Controlla" compare il filtro "solo con problemi".
 - **Ogni voce**: modifica tag (con suggerimenti dai tag già usati; Invio salva, Esc annulla), modifica descrizione (Ctrl+Invio salva), rigenera con AI, apri sul telefono, apri in Chrome sul PC, elimina.
 - **Selezione multipla**: aggiungi tag, togli tag, rigenera con AI, apri sul telefono/PC, elimina. "Seleziona tutti i risultati" agisce solo sulle voci filtrate.
-- **Cestino**: le voci eliminate vanno in `links-eliminati.md` accanto a `links.md` e si possono ripristinare. `sync` non le salva di nuovo e, con la chiusura delle schede attiva, chiude anche le loro schede.
+- **Cestino**: le voci eliminate vanno in `links-eliminati.md` accanto a `links.md` e si possono ripristinare. `sync` non le salva di nuovo e, con la chiusura delle schede attiva, chiude anche le loro schede. Dal cestino si possono anche **eliminare definitivamente** (resta solo il backup); a quel punto, se la scheda è ancora aperta, il sync successivo la salverà di nuovo.
 - Ogni modifica passa dai backup in `.pck-backup/`. Se il file cambia altrove (es. `pck sync` dal terminale), la pagina si aggiorna invece di sovrascriverlo. Durante sync e rigenera le modifiche dalla pagina sono sospese.
 - La pagina stessa (`127.0.0.1:4317`) non viene mai salvata né chiusa dai sync.
 - Con la sorgente PC, Chrome chiede di approvare ogni collegamento: con "chiudi schede" le richieste sono due, una per l'anteprima e una per il sync.

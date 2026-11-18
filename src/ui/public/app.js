@@ -148,6 +148,7 @@ async function loadStatus(force = false) {
     set('#st-phone', st.phone, st.phone.ok ? `Telefono · ${st.phone.model ?? st.phone.serial}` : 'Telefono offline');
     set('#st-pc', st.pc, st.pc.ok ? 'Chrome PC · pronto' : 'Chrome PC · non attivo');
     $('#opt-ai').title = st.ai.ok ? `Usa ${st.ai.provider} (${st.ai.model ?? ''})` : `AI non pronta: ${st.ai.detail ?? ''}`;
+    $('#st-ai').title = `${st.ai.detail ?? ''}\nClic: impostazioni AI`;
   } catch (e) {
     if (e.status === 401) handleError(e);
   }
@@ -438,6 +439,118 @@ async function phoneSync() {
   await syncFrom('phone', { serial: i && p ? `${i}:${p}` : undefined, ai: fd.get('ai') === 'on', close: fd.get('close') === 'on' });
 }
 
+/** Valori del modulo impostazioni AI → corpo per /api/ai. */
+function readAiForm(form) {
+  const v = (n) => form.elements[n]?.value ?? '';
+  return {
+    defaultProvider: v('provider'),
+    language: v('language'),
+    providers: {
+      local: { baseUrl: v('local.baseUrl'), model: v('local.model'), batchSize: v('local.batchSize'), reasoningEffort: v('local.reasoningEffort') },
+      claude: { model: v('claude.model'), batchSize: v('claude.batchSize'), effort: v('claude.effort') },
+      gemini: { model: v('gemini.model'), batchSize: v('gemini.batchSize'), apiKeyEnv: v('gemini.apiKeyEnv') },
+    },
+  };
+}
+
+/** Finestra "Impostazioni AI": provider, parametri, elenco modelli locali, prova senza salvare. */
+async function aiSettings() {
+  let s;
+  try { s = await api('/api/ai'); } catch (e) { return handleError(e); }
+  const P = s.providers;
+  const opt = (list, cur, label = (x) => x) => list.map((x) => `<option value="${esc(x)}"${x === cur ? ' selected' : ''}>${esc(label(x))}</option>`).join('');
+  const cred = (ok, env) => (ok ? `<span class="res ok">${esc(env)} impostata</span>` : `<span class="res bad">${esc(env)} non impostata</span>`);
+  const LANG = { it: 'italiano', en: 'inglese', es: 'spagnolo', fr: 'francese', de: 'tedesco', pt: 'portoghese' };
+  const REASON = { none: 'disattivato (consigliato)', low: 'basso', medium: 'medio', high: 'alto', '': 'non inviare il parametro' };
+  const fd = await dialog({
+    title: 'Impostazioni AI',
+    ok: 'Salva',
+    html: `<div class="form">
+      <label class="k">Provider</label>
+      <div class="inline">${s.options.providers.map((p) => `<label class="opt"><input type="radio" name="provider" value="${p}"${p === s.defaultProvider ? ' checked' : ''}> ${{ local: 'Locale (LM Studio / Ollama)', claude: 'Claude', gemini: 'Gemini' }[p] ?? p}</label>`).join('')}</div>
+
+      <label class="k" data-prov="local" for="ai-lurl">Server</label>
+      <input data-prov="local" type="text" id="ai-lurl" name="local.baseUrl" value="${esc(P.local.baseUrl)}" placeholder="http://localhost:1234/v1">
+      <label class="k" data-prov="local" for="ai-lmodel">Modello</label>
+      <div class="inline" data-prov="local"><select id="ai-lmodel" name="local.model" style="flex:1"><option value="">automatico (quello caricato)</option>${P.local.model ? `<option selected>${esc(P.local.model)}</option>` : ''}</select><button type="button" id="ai-lrefresh">Aggiorna elenco</button></div>
+      <label class="k" data-prov="local" for="ai-lreason">Ragionamento</label>
+      <select data-prov="local" id="ai-lreason" name="local.reasoningEffort">${['none', 'low', 'medium', 'high', ''].map((x) => `<option value="${x}"${x === (P.local.reasoningEffort ?? '') ? ' selected' : ''}>${REASON[x]}</option>`).join('')}</select>
+      <label class="k" data-prov="local" for="ai-lbatch">Link per richiesta</label>
+      <input data-prov="local" type="number" id="ai-lbatch" name="local.batchSize" value="${esc(P.local.batchSize)}" min="1" max="50" style="width:100px">
+
+      <label class="k" data-prov="claude" for="ai-cmodel">Modello</label>
+      <input data-prov="claude" type="text" id="ai-cmodel" name="claude.model" value="${esc(P.claude.model)}" list="ai-csugg" autocomplete="off">
+      <label class="k" data-prov="claude" for="ai-ceffort">Effort</label>
+      <select data-prov="claude" id="ai-ceffort" name="claude.effort">${opt(s.options.effort, P.claude.effort)}</select>
+      <label class="k" data-prov="claude" for="ai-cbatch">Link per richiesta</label>
+      <input data-prov="claude" type="number" id="ai-cbatch" name="claude.batchSize" value="${esc(P.claude.batchSize)}" min="1" max="50" style="width:100px">
+      <label class="k" data-prov="claude">Credenziali</label>
+      <span data-prov="claude">${cred(s.credentials.claude, 'ANTHROPIC_API_KEY')} <span class="hint">(oppure un profilo di <code>ant auth login</code>)</span></span>
+
+      <label class="k" data-prov="gemini" for="ai-gmodel">Modello</label>
+      <input data-prov="gemini" type="text" id="ai-gmodel" name="gemini.model" value="${esc(P.gemini.model)}" list="ai-gsugg" autocomplete="off">
+      <label class="k" data-prov="gemini" for="ai-genv">Variabile della chiave</label>
+      <input data-prov="gemini" type="text" id="ai-genv" name="gemini.apiKeyEnv" value="${esc(P.gemini.apiKeyEnv)}">
+      <label class="k" data-prov="gemini" for="ai-gbatch">Link per richiesta</label>
+      <input data-prov="gemini" type="number" id="ai-gbatch" name="gemini.batchSize" value="${esc(P.gemini.batchSize)}" min="1" max="50" style="width:100px">
+      <label class="k" data-prov="gemini">Credenziali</label>
+      <span data-prov="gemini">${cred(s.credentials.gemini, P.gemini.apiKeyEnv)}</span>
+
+      <label class="k" for="ai-lang">Lingua descrizioni</label>
+      <select id="ai-lang" name="language">${opt(s.options.languages, s.language, (x) => LANG[x] ?? x)}</select>
+
+      <span class="full hint">Le chiavi API non si inseriscono qui: si leggono dalle variabili d'ambiente all'avvio di pck ui. Le impostazioni vengono salvate in ${esc(s.configFile)} e valgono anche per i comandi da terminale.</span>
+      <div class="full inline"><button type="button" id="ai-test">Prova su un link di esempio</button><span id="ai-res" class="res"></span></div>
+    </div>
+    <datalist id="ai-csugg">${opt(s.options.suggestions.claude)}</datalist><datalist id="ai-gsugg">${opt(s.options.suggestions.gemini)}</datalist>`,
+    validate: (form) => {
+      const b = readAiForm(form);
+      if (b.defaultProvider === 'local' && !/^https?:\/\/\S+$/.test(b.providers.local.baseUrl.trim())) return 'Indirizzo del server locale non valido (es. http://localhost:1234/v1).';
+      for (const p of ['local', 'claude', 'gemini']) {
+        const n = Number(b.providers[p].batchSize);
+        if (!(Number.isInteger(n) && n >= 1 && n <= 50)) return 'Link per richiesta: da 1 a 50.';
+      }
+      return null;
+    },
+    onOpen: (d) => {
+      const form = d.querySelector('form') ?? $('#dlg-form');
+      const show = () => {
+        const cur = form.elements.provider.value;
+        d.querySelectorAll('[data-prov]').forEach((el) => { el.hidden = el.dataset.prov !== cur; });
+      };
+      d.querySelectorAll('input[name=provider]').forEach((r) => r.addEventListener('change', show));
+      show();
+      const sel = d.querySelector('#ai-lmodel');
+      const refresh = async () => {
+        const res = d.querySelector('#ai-res');
+        try {
+          const { models } = await api(`/api/ai/models?baseUrl=${encodeURIComponent(d.querySelector('#ai-lurl').value.trim())}`);
+          const keep = sel.value;
+          sel.innerHTML = `<option value="">automatico (quello caricato)</option>${models.map((m) => `<option value="${esc(m.id)}"${m.id === keep ? ' selected' : ''}>${esc(m.id)}${m.loaded ? ' · caricato' : ''}${m.context ? ` · ${m.context} token` : ''}</option>`).join('')}`;
+          if (keep && !models.some((m) => m.id === keep)) sel.insertAdjacentHTML('beforeend', `<option selected>${esc(keep)}</option>`);
+          setRes(res, true, `${models.length} modelli sul server`);
+        } catch (e) { setRes(res, false, e.message); }
+      };
+      d.querySelector('#ai-lrefresh').addEventListener('click', refresh);
+      if (form.elements.provider.value === 'local') refresh();
+      d.querySelector('#ai-test').addEventListener('click', async () => {
+        const res = d.querySelector('#ai-res');
+        setRes(res, true, 'Provo…');
+        try {
+          const r = await runJob({ type: 'ai-test', settings: readAiForm(form) });
+          setRes(res, true, `${r.provider} · ${(r.ms / 1000).toFixed(1)} s · "${r.description}" ${r.tags.map((t) => `#${t}`).join(' ')}`);
+        } catch (e) { setRes(res, false, e.message.split('\n')[0]); }
+      });
+    },
+  });
+  if (!fd) return;
+  try {
+    const r = await api('/api/ai', readAiForm($('#dlg-form')));
+    toast(`Impostazioni AI salvate (${r.settings.defaultProvider}) in ${r.savedTo.split(/[\\/]/).pop()}`);
+    loadStatus(true);
+  } catch (e) { handleError(e); }
+}
+
 async function syncFrom(source, { serial, ai = $('#opt-ai').checked, close = $('#opt-close').checked } = {}) {
   try {
     if (close) {
@@ -608,7 +721,7 @@ document.addEventListener('click', (ev) => {
   if (act) {
     ({
       'sync-phone': () => phoneSync(), 'sync-pc': () => syncFrom('pc'), check: () => check(false), 'check-links': () => check(true),
-      undo, trash: toggleTrash,
+      undo, trash: toggleTrash, 'ai-settings': aiSettings,
     })[act]?.();
     return;
   }
@@ -681,6 +794,8 @@ document.addEventListener('input', (ev) => {
 });
 
 document.addEventListener('keydown', (ev) => {
+  // Elementi non-button con data-act (es. l'indicatore AI): Invio o spazio li attivano come un pulsante.
+  if ((ev.key === 'Enter' || ev.key === ' ') && ev.target.matches?.('[data-act]:not(button)')) { ev.preventDefault(); ev.target.click(); return; }
   const inEdit = ev.target.matches?.('[data-edit-input]');
   if (inEdit && ev.key === 'Escape') { S.editing = null; renderList(); return; }
   if (inEdit && ev.key === 'Enter' && (ev.target.tagName === 'INPUT' || ev.ctrlKey)) { ev.preventDefault(); saveEdit(); return; }

@@ -20,6 +20,7 @@ const FILE = [
 let ui;
 let base;
 let file;
+const savedPatches = [];
 const silent = { info() {}, ok() {}, warn() {}, error() {}, debug() {}, verbose: false };
 const fakeAdb = { devices: async () => [] };
 
@@ -28,7 +29,7 @@ before(async () => {
   file = path.join(dir, 'links.md');
   await fs.writeFile(file, FILE);
   const cfg = merge(DEFAULTS, { ai: { providers: { local: { baseUrl: 'http://127.0.0.1:9/v1' } } }, pc: { userDataDir: dir } });
-  ui = createUiServer({ cfg, adb: fakeAdb, log: silent, file });
+  ui = createUiServer({ cfg, adb: fakeAdb, log: silent, file, saveConfig: (p) => { savedPatches.push(p); return 'config-di-test.json'; } });
   await new Promise((r) => ui.server.listen(0, '127.0.0.1', r));
   const { port } = ui.server.address();
   ui.setPort(port);
@@ -156,6 +157,37 @@ test('telefono: elenco dispositivi e indirizzo non valido rifiutato prima di avv
   assert.equal(last.type, 'pair');
   assert.equal(last.status, 'error');
   assert.match(last.error, /6 cifre/);
+});
+
+test('impostazioni AI: lettura, validazione, salvataggio e applicazione in memoria', async () => {
+  const view = await (await api('/api/ai')).json();
+  assert.equal(view.defaultProvider, 'local');
+  assert.equal(view.providers.local.reasoningEffort, 'none');
+  assert.ok(view.options.providers.includes('gemini'));
+  assert.ok(!JSON.stringify(view).match(/sk-ant|AIza/), 'nessuna chiave nella risposta');
+
+  const bad = [
+    { defaultProvider: 'openai' },
+    { language: 'xx' },
+    { providers: { local: { baseUrl: 'file:///etc/passwd' } } },
+    { providers: { local: { baseUrl: 'http://localhost:1234/v1', batchSize: 0 } } },
+    { providers: { claude: { effort: 'turbo' } } },
+    { providers: { gemini: { apiKeyEnv: 'chiave; rm' } } },
+  ];
+  for (const body of bad) assert.equal((await api('/api/ai', { method: 'POST', body })).status, 400, JSON.stringify(body));
+  assert.equal(savedPatches.length, 0, 'niente salvato con dati non validi');
+
+  const ok = await (await api('/api/ai', { method: 'POST', body: {
+    defaultProvider: 'claude', language: 'en',
+    providers: { local: { baseUrl: 'http://localhost:1234/v1/', model: '', batchSize: 3, reasoningEffort: '' }, claude: { model: 'claude-sonnet-5-5', effort: 'medium', batchSize: 10 } },
+  } })).json();
+  assert.equal(ok.savedTo, 'config-di-test.json');
+  assert.deepEqual(savedPatches[0].ai.providers.local, { baseUrl: 'http://localhost:1234/v1', model: null, batchSize: 3, reasoningEffort: null });
+  assert.equal(ok.settings.defaultProvider, 'claude');
+  assert.equal(ok.settings.language, 'en');
+  assert.equal(ok.settings.providers.claude.model, 'claude-sonnet-5-5');
+  const st = await (await api('/api/status')).json();
+  assert.equal(st.ai.provider, 'claude', 'lo stato riflette subito il nuovo provider');
 });
 
 test('host diverso (DNS rebinding) → 403', async () => {
