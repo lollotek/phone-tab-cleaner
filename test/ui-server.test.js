@@ -94,6 +94,18 @@ test('modifica tag, conflitto di versione, eliminazione nel cestino, ripristino,
   assert.equal((await (await api('/api/state')).json()).entries.length, 2, 'annullato il ripristino');
 });
 
+test('cestino: eliminazione definitiva', async () => {
+  let s = await (await api('/api/state')).json();
+  await api('/api/entries/delete', { method: 'POST', body: { version: s.version, keys: ['https://b.com'] } });
+  s = await (await api('/api/state')).json();
+  assert.equal(s.trashCount, 1);
+  assert.equal((await api('/api/trash/purge', { method: 'POST', body: { keys: [] } })).status, 400);
+  const r = await (await api('/api/trash/purge', { method: 'POST', body: { keys: ['https://b.com'] } })).json();
+  assert.equal(r.purged, 1);
+  assert.equal((await (await api('/api/state')).json()).trashCount, 0);
+  assert.ok(!(await fs.readFile(path.join(path.dirname(file), 'links-eliminati.md'), 'utf8')).includes('b.com'));
+});
+
 test('stato: AI non raggiungibile, telefono assente, PC senza debug remoto', async () => {
   const st = await (await api('/api/status?force=1')).json();
   assert.equal(st.ai.ok, false);

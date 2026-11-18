@@ -150,6 +150,19 @@ export async function undoLast(file, { backup }) {
   return { version: fileVersion(previous), restoredFrom: last };
 }
 
+/**
+ * Elimina definitivamente voci dal cestino (resta solo il backup in .pck-backup).
+ * Da quel momento sync le tratta come link mai visti: se la scheda è ancora aperta, verrebbe salvata di nuovo.
+ */
+export async function purgeFromTrash(file, keys, { normalize, backup }) {
+  const trash = trashPath(file);
+  const trashText = await readTextIfExists(trash);
+  if (trashText === null) return { purged: 0 };
+  const { text, removed } = deleteFromText(trashText, keys, normalize);
+  if (removed.length) await writeAtomic(trash, text, { backup });
+  return { purged: removed.length };
+}
+
 /** Voci del cestino non più presenti nel file principale (quelle ripristinate o re-importate non si mostrano). */
 export async function readTrash(file, normalize) {
   const text = (await readTextIfExists(file)) ?? '';

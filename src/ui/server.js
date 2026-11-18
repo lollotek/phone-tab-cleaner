@@ -18,7 +18,7 @@ import { runSync } from '../sync.js';
 import { runRetag } from '../retag.js';
 import { openSource } from '../sources/index.js';
 import {
-  EXIT_CONFLICT, editTagsInText, fileVersion, moveToTrash, mutate, readTrash, restoreFromTrash, trashPath, undoLast, updateInText,
+  EXIT_CONFLICT, editTagsInText, fileVersion, moveToTrash, mutate, purgeFromTrash, readTrash, restoreFromTrash, trashPath, undoLast, updateInText,
 } from '../store.js';
 import { readTextIfExists } from '../util.js';
 import { createJobRunner, LOCKED } from './jobs.js';
@@ -229,6 +229,13 @@ export function createUiServer({ cfg, adb, log, file }) {
       assertWritable();
       const r = await restoreFromTrash(file, b.version, b.keys ?? [], { normalize, backup: cfg.backup });
       changed(r.version);
+      return r;
+    },
+    'POST /api/trash/purge': async (b) => {
+      assertWritable();
+      if (!Array.isArray(b.keys) || !b.keys.length) throw new PckError('Nessuna voce selezionata.');
+      const r = await purgeFromTrash(file, b.keys, { normalize, backup: cfg.backup });
+      changed(fileVersion((await readTextIfExists(file)) ?? ''));
       return r;
     },
     'POST /api/undo': async () => {

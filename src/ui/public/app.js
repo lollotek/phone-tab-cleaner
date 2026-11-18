@@ -215,6 +215,7 @@ function rowHtml(e) {
   const issueHtml = issues ? `<div class="issues">${issues.map((i) => `<span class="issue${i.severity === 'errore' ? ' err' : ''}" title="${esc(i.message)}">${esc(ISSUE_LABELS[i.kind] ?? i.kind)}</span>`).join('')}</div>` : '';
   const acts = trash
     ? `<button class="ib" data-row="restore" title="Ripristina nell'elenco" aria-label="Ripristina">${icon('restore')}</button>`
+      + `<button class="ib danger" data-row="purge" title="Elimina definitivamente" aria-label="Elimina definitivamente">${icon('trash')}</button>`
     : `<button class="ib" data-row="tags" title="Modifica tag" aria-label="Modifica tag">${icon('tags')}</button>`
       + `<button class="ib" data-row="description" title="Modifica descrizione" aria-label="Modifica descrizione">${icon('edit')}</button>`
       + `<button class="ib" data-row="retag" title="Rigenera descrizione e tag con l'AI" aria-label="Rigenera con AI">${icon('ai')}</button>`
@@ -410,6 +411,23 @@ async function restore(keys) {
   } catch (e) { handleError(e); }
 }
 
+async function purge(keys) {
+  if (!keys.length) return;
+  const ok = await dialog({
+    title: keys.length === 1 ? 'Eliminare definitivamente questa voce?' : `Eliminare definitivamente ${keys.length} voci?`,
+    html: '<p>Spariscono anche dal cestino. Resta solo una copia nei backup (.pck-backup).</p><p class="muted">Attenzione: se la scheda è ancora aperta sul telefono o sul PC, il prossimo sync la salverà di nuovo come link nuovo.</p>',
+    ok: 'Elimina definitivamente',
+    danger: true,
+  });
+  if (!ok) return;
+  try {
+    const r = await api('/api/trash/purge', { keys });
+    keys.forEach((k) => S.selected.delete(k));
+    await load();
+    toast(`${r.purged} voc${r.purged === 1 ? 'e eliminata' : 'i eliminate'} definitivamente`);
+  } catch (e) { handleError(e); }
+}
+
 async function saveEdit() {
   const input = $('[data-edit-input]');
   if (!input || !S.editing) return;
@@ -520,6 +538,7 @@ document.addEventListener('click', (ev) => {
     if (a === 'tags' || a === 'description') { S.editing = S.editing?.key === key && S.editing.field === a ? null : { key, field: a }; renderList(); }
     else if (a === 'delete') remove([key]);
     else if (a === 'restore') restore([key]);
+    else if (a === 'purge') purge([key]);
     else if (a === 'retag') retag([key]);
     else if (a === 'open-phone') openOn('phone', [key]);
     else if (a === 'open-pc') openOn('pc', [key]);
@@ -531,7 +550,7 @@ document.addEventListener('click', (ev) => {
     ({
       'add-tag': () => bulkTags('add'), 'remove-tag': () => bulkTags('remove'), retag: () => retag(keys),
       'open-phone': () => openOn('phone', keys), 'open-pc': () => openOn('pc', keys), delete: () => remove(keys),
-      restore: () => restore(keys), clear: () => { S.selected.clear(); renderList(); renderBulk(); },
+      restore: () => restore(keys), purge: () => purge(keys), clear:() => { S.selected.clear(); renderList(); renderBulk(); },
     })[bulk]?.();
   }
 });
