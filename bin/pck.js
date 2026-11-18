@@ -8,6 +8,7 @@ import { createLogger } from '../src/log.js';
 import { runSync } from '../src/sync.js';
 import { runRetag } from '../src/retag.js';
 import { mergeTags, removeTags, renameTag, showTagStats } from '../src/tags.js';
+import { runCheck } from '../src/check.js';
 import { PROVIDERS } from '../src/tagger/ai/index.js';
 import { cleanText, decodeEntities } from '../src/util.js';
 
@@ -196,6 +197,18 @@ tags
   .option('--dry-run', 'mostra prima/dopo senza modificare il file')
   .action(action(async (ctx, list, opts) => {
     await removeTags(list, { ...ctx, opts });
+  }));
+
+program
+  .command('check')
+  .description('controlla links.md (sola lettura): righe malformate, URL doppi o non validi, voci senza tag/descrizione')
+  .option('-f, --file <path>', 'file markdown (default: config defaultFile)')
+  .option('--links', 'verifica anche i link morti (una richiesta per voce)')
+  .option('--concurrency <n>', 'richieste parallele con --links')
+  .option('--max <n>', 'righe mostrate per tipo di problema (default 10)')
+  .option('--json', 'output JSON')
+  .action(action(async ({ cfg, log }, opts) => {
+    await runCheck({ cfg, log, opts });
   }));
 
 program

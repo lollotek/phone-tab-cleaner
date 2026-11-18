@@ -108,6 +108,22 @@ pck tags remove emulazione
 - `remove` non crea alias e segnala le voci rimaste senza tag.
 - Se `pck.prompt.md` cita il vecchio tag viene mostrato un avviso, perché è testo libero e va aggiornato a mano.
 
+## Controllare il file (`pck check`)
+
+```bash
+pck check                 # solo il file: nessuna richiesta di rete
+pck check --links         # verifica anche i link morti (una richiesta per voce)
+pck check --json          # per script
+```
+
+È in sola lettura. Gli **errori** fanno uscire il comando con codice 1:
+- righe che sembrano voci ma non rispettano il formato;
+- URL non validi;
+- URL doppi (anche se differiscono solo per tracciamento, `www.` o slash finale);
+- con `--links`, link morti (HTTP 404/410 o dominio non trovato nel DNS).
+
+Gli **avvisi** sono voci senza tag o senza descrizione, tag non in kebab-case (con il nome suggerito) e, con `--links`, link non verificabili (siti che bloccano i bot con 403/429, errori del server, timeout). Per ogni tipo di problema viene suggerito il comando per correggerlo (`pck retag --empty`, `pck tags rename …`); `--max <n>` mostra più righe.
+
 ## Backup
 
 Prima di ogni modifica di `links.md` il tool ne salva una copia in `.pck-backup/` (es. `links-20261118-101500.md`) e conserva le ultime 10. Il numero si cambia con `"backup": { "keep": 20 }` nel config. Per ripristinare basta copiare il backup al posto di `links.md`; se la cartella è sotto git, si può usare anche `git checkout links.md`.

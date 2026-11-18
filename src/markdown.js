@@ -90,6 +90,18 @@ export function replaceLines(text, replacements) {
   return lines.join(eol);
 }
 
+/** Tag finali di una riga così come sono scritti (senza normalizzare maiuscole): per `pck check`. */
+export function rawTrailingTags(line) {
+  const t = TRAILING_TAGS_RE.exec(line);
+  return t ? [...t[1].matchAll(TAG_RE)].map(([, tag]) => tag) : [];
+}
+
+/** true se la riga sembra voler essere una voce (elenco con link) ma non rispetta il formato. */
+export function looksLikeBrokenEntry(line) {
+  if (ENTRY_RE.test(line)) return false;
+  return /^\s*[-*+]\s+/.test(line) && (/\]\(/.test(line) || /^\s*[-*+]\s+\[/.test(line) || /https?:\/\//.test(line));
+}
+
 /** Cambia solo i tag finali di una riga, lasciando intatto tutto il resto (anche le righe scritte a mano). */
 export function replaceTrailingTags(line, tags) {
   const m = ENTRY_RE.exec(line);
