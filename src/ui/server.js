@@ -17,6 +17,8 @@ import { checkLinks, checkText } from '../check.js';
 import { runSync } from '../sync.js';
 import { runRetag } from '../retag.js';
 import { openSource } from '../sources/index.js';
+import { resolveDevice } from '../adb.js';
+import { loadConfig } from '../config.js';
 import {
   EXIT_CONFLICT, editTagsInText, fileVersion, moveToTrash, mutate, purgeFromTrash, readTrash, restoreFromTrash, trashPath, undoLast, updateInText,
 } from '../store.js';
@@ -32,6 +34,7 @@ const STATIC = {
   '/style.css': ['style.css', 'text/css; charset=utf-8'],
 };
 const MAX_OPEN = 50;
+const HOST_PORT = /^[A-Za-z0-9.-]+:\d{1,5}$/;
 
 /** Codice HTTP per un errore del tool. */
 function statusFor(e) {
@@ -105,8 +108,18 @@ export function createUiServer({ cfg, adb, log, file }) {
   }
 
   // ── operazioni lunghe ────────────────────────────────────────────────────────────────────────────
+  /** Indirizzo del telefono (ip:porta) scelto nella finestra; undefined = automatico (mDNS / ultimo usato). */
+  const serialOf = (b) => {
+    if (b.serial === undefined || b.serial === null || b.serial === '') return undefined;
+    const s = String(b.serial).trim();
+    if (!HOST_PORT.test(s)) throw new PckError(`Indirizzo non valido: "${s}". Usa IP:porta, es. 192.168.1.2:41401.`);
+    return s;
+  };
+  const rememberDevice = (serial) => { if (serial) cfg.lastDevice = serial; };
+
   const syncOpts = (b) => ({
     file,
+    serial: b.source === 'pc' ? undefined : serialOf(b),
     source: b.source === 'pc' ? 'pc' : 'phone',
     ai: b.ai ? true : undefined,
     close: Boolean(b.close),
@@ -119,7 +132,9 @@ export function createUiServer({ cfg, adb, log, file }) {
       writes: true,
       label: (b) => `Sync ${b.source === 'pc' ? 'PC' : 'telefono'}${b.ai ? ' con AI' : ''}${b.close ? ' e chiusura schede' : ''}`,
       run: async (b, jlog) => {
-        const r = await runSync({ cfg, adb, log: jlog, opts: syncOpts(b) });
+        const opts = syncOpts(b);
+        const r = await runSync({ cfg, adb, log: jlog, opts });
+        rememberDevice(opts.serial);
         const text = (await readTextIfExists(file)) ?? '';
         changed(fileVersion(text));
         return { added: r.written ? r.entries?.length ?? 0 : 0, closed: r.closed?.closed ?? 0, version: fileVersion(text) };
@@ -129,7 +144,7 @@ export function createUiServer({ cfg, adb, log, file }) {
       writes: false,
       label: (b) => `Anteprima chiusura (${b.source === 'pc' ? 'PC' : 'telefono'})`,
       run: async (b, jlog) => {
-        const source = await openSource(b.source === 'pc' ? 'pc' : 'phone', { adb, cfg, log: jlog, opts: {} });
+        const source = await openSource(b.source === 'pc' ? 'pc' : 'phone', { adb, cfg, log: jlog, opts: { serial: b.source === 'pc' ? undefined : serialOf(b) } });
         try {
           const tabs = await source.withTabs((dt) => dt.listTabs());
           const exclude = [...(cfg.exclude ?? []), ...extraExclude()];
@@ -167,6 +182,30 @@ export function createUiServer({ cfg, adb, log, file }) {
         return { issues: withKeys, errors, warnings: issues.length - errors };
       },
     },
+    connect: {
+      writes: false,
+      label: (b) => `Connessione al telefono ${b.serial ?? ''}`.trim(),
+      run: async (b, jlog) => {
+        const dev = await resolveDevice(adb, cfg, { serial: serialOf(b) }, jlog);
+        rememberDevice(HOST_PORT.test(dev.serial) ? dev.serial : undefined);
+        jlog.ok(`Connesso a ${dev.serial}${dev.model ? ` (${dev.model})` : ''}`);
+        return { serial: dev.serial, model: dev.model ?? null };
+      },
+    },
+    pair: {
+      writes: false,
+      label: (b) => `Abbinamento con ${b.hostPort ?? ''}`,
+      run: async (b, jlog) => {
+        const hp = String(b.hostPort ?? '').trim();
+        const code = String(b.code ?? '').trim();
+        if (!HOST_PORT.test(hp)) throw new PckError('Indirizzo di abbinamento non valido (IP:porta).');
+        if (!/^\d{6}$/.test(code)) throw new PckError('Il codice di abbinamento è di 6 cifre.');
+        const out = await adb.pair(hp, code);
+        if (!/success/i.test(out)) throw new PckError(`Abbinamento non riuscito: ${out}`);
+        jlog.ok(out);
+        return { paired: true };
+      },
+    },
     open: {
       writes: false,
       label: (b) => `Apri ${b.urls?.length ?? 0} link sul ${b.source === 'pc' ? 'PC' : 'telefono'}`,
@@ -174,7 +213,7 @@ export function createUiServer({ cfg, adb, log, file }) {
         const urls = (b.urls ?? []).filter((u) => /^https?:\/\//i.test(u));
         if (!urls.length) throw new PckError('Nessun link da aprire.');
         if (urls.length > MAX_OPEN) throw new PckError(`Troppi link (${urls.length}): al massimo ${MAX_OPEN} per volta.`);
-        const source = await openSource(b.source === 'pc' ? 'pc' : 'phone', { adb, cfg, log: jlog, opts: {} });
+        const source = await openSource(b.source === 'pc' ? 'pc' : 'phone', { adb, cfg, log: jlog, opts: { serial: b.source === 'pc' ? undefined : serialOf(b) } });
         try {
           let opened = 0;
           await source.withTabs(async (dt) => {
@@ -196,9 +235,18 @@ export function createUiServer({ cfg, adb, log, file }) {
     'GET /api/state': () => state(),
     'GET /api/status': (_b, url) => getStatus({ force: url.searchParams.has('force') }),
     'GET /api/jobs': () => jobs.state(),
+    'GET /api/phone': async () => {
+      let devices = [];
+      try { devices = await adb.devices(); } catch (e) { return { devices, lastDevice: cfg.lastDevice ?? null, error: e.message.split('\n')[0] }; }
+      // L'ultimo indirizzo può essere stato aggiornato dalla CLI nel frattempo: lo si rilegge dal config.
+      let lastDevice = cfg.lastDevice ?? null;
+      try { lastDevice = loadConfig().lastDevice ?? lastDevice; } catch { /* config non valido: si usa quello in memoria */ }
+      return { devices, lastDevice };
+    },
     'POST /api/jobs': async (b) => {
       const def = JOBS[b.type];
       if (!def) throw new PckError(`Operazione sconosciuta: ${b.type}`);
+      serialOf(b); // indirizzo non valido → 400 subito, prima di avviare l'operazione
       return jobs.start(b.type, def.label(b), { writes: def.writes }, (jlog) => def.run(b, jlog));
     },
     'POST /api/entries/update': async (b) => {

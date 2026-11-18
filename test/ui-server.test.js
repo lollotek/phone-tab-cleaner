@@ -142,6 +142,22 @@ test('operazione "check" in background con eventi SSE e blocco di una seconda op
   assert.equal((await api('/api/jobs', { method: 'POST', body: { type: 'boh' } })).status, 400);
 });
 
+test('telefono: elenco dispositivi e indirizzo non valido rifiutato prima di avviare', async () => {
+  const ph = await (await api('/api/phone')).json();
+  assert.deepEqual(ph.devices, []);
+  for (const serial of ['192.168.1.2', '192.168.1.2:porta', 'a b:12', '1.2.3.4:5555; rm -rf /']) {
+    const r = await api('/api/jobs', { method: 'POST', body: { type: 'sync', source: 'phone', serial } });
+    assert.equal(r.status, 400, serial);
+  }
+  const pair = await api('/api/jobs', { method: 'POST', body: { type: 'pair', hostPort: '192.168.1.2:37000', code: '12' } });
+  assert.equal(pair.status, 200, 'la validazione del codice avviene nell\'operazione');
+  await new Promise((r) => setTimeout(r, 50));
+  const { last } = await (await api('/api/jobs')).json();
+  assert.equal(last.type, 'pair');
+  assert.equal(last.status, 'error');
+  assert.match(last.error, /6 cifre/);
+});
+
 test('host diverso (DNS rebinding) → 403', async () => {
   const r = await new Promise((resolve) => {
     import('node:http').then(({ request }) => {

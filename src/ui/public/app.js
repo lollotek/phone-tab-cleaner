@@ -81,20 +81,44 @@ function handleError(e) {
   toast(e.message, { error: true, ms: 8000 });
 }
 
-/** Dialogo modale. @returns {Promise<FormData|null>} null se annullato */
-function dialog({ title, html, ok = 'OK', danger = false, onOpen }) {
+/**
+ * Dialogo modale. `validate(form)` può restituire un messaggio d'errore: il dialogo resta aperto e lo mostra.
+ * @returns {Promise<FormData|null>} null se annullato
+ */
+function dialog({ title, html, ok = 'OK', danger = false, onOpen, validate }) {
   const dlg = $('#dlg');
+  const form = $('#dlg-form');
+  const err = $('#dlg-error');
   $('#dlg-title').textContent = title;
   $('#dlg-body').innerHTML = html;
+  err.hidden = true;
   const okBtn = $('#dlg-ok');
   okBtn.textContent = ok;
   okBtn.className = danger ? 'danger' : 'primary';
   dlg.returnValue = '';
+  const onSubmit = (ev) => {
+    if (ev.submitter?.value !== 'ok' || !validate) return;
+    const msg = validate(form);
+    if (msg) { ev.preventDefault(); err.textContent = msg; err.hidden = false; }
+  };
+  const clearErr = () => { err.hidden = true; };
+  form.addEventListener('submit', onSubmit);
+  form.addEventListener('input', clearErr);
   dlg.showModal();
   onOpen?.(dlg);
   return new Promise((resolve) => {
-    dlg.addEventListener('close', () => resolve(dlg.returnValue === 'ok' ? new FormData($('#dlg-form')) : null), { once: true });
+    dlg.addEventListener('close', () => {
+      form.removeEventListener('submit', onSubmit);
+      form.removeEventListener('input', clearErr);
+      resolve(dlg.returnValue === 'ok' ? new FormData(form) : null);
+    }, { once: true });
   });
+}
+
+/** Mostra l'esito di un'azione dentro un dialogo aperto (es. "Verifica connessione"). */
+function setRes(el, ok, text) {
+  el.className = `res ${ok ? 'ok' : 'bad'}`;
+  el.textContent = text;
 }
 
 // ── caricamento ───────────────────────────────────────────────────────────────────────────────────────
@@ -332,12 +356,92 @@ function connectEvents() {
 // ── azioni ────────────────────────────────────────────────────────────────────────────────────────────
 const entryByKey = (k) => (S.view === 'trash' ? S.trash : S.data.entries).find((e) => e.key === k);
 
-async function syncFrom(source) {
-  const ai = $('#opt-ai').checked;
-  const close = $('#opt-close').checked;
+const splitHostPort = (s) => {
+  const i = (s ?? '').lastIndexOf(':');
+  return i > 0 ? [s.slice(0, i), s.slice(i + 1)] : ['', ''];
+};
+
+/** Finestra "Sync telefono": IP e porta (precompilati), verifica connessione, opzioni, primo abbinamento. */
+async function phoneSync() {
+  let info;
+  try { info = await api('/api/phone'); } catch (e) { return handleError(e); }
+  const connected = info.devices.find((d) => d.state === 'device' && /:\d+$/.test(d.serial));
+  const [ip, port] = splitHostPort(connected?.serial ?? info.lastDevice ?? '');
+  const devs = info.devices.length
+    ? info.devices.map((d) => `<button type="button" class="small" data-dev="${esc(d.serial)}" title="Usa questo indirizzo">${esc(d.serial)} · ${esc(d.state)}${d.model ? ` · ${esc(d.model)}` : ''}</button>`).join('')
+    : `<span class="hint">${esc(info.error ?? 'nessun dispositivo')}</span>`;
+  const fd = await dialog({
+    title: 'Sync telefono',
+    ok: 'Sincronizza',
+    html: `<div class="form">
+      <label class="k" for="ph-ip">IP</label>
+      <input type="text" id="ph-ip" name="ip" value="${esc(ip)}" placeholder="192.168.1.2" autocomplete="off">
+      <label class="k" for="ph-port">Porta</label>
+      <div class="inline"><input type="number" id="ph-port" name="port" value="${esc(port)}" min="1" max="65535" style="width:120px">
+        <button type="button" id="ph-test">Verifica connessione</button><span id="ph-res" class="res"></span></div>
+      <span class="hint full">Li trovi sul telefono in Opzioni sviluppatore → Debug wireless ("Indirizzo IP e porta"). La porta cambia a ogni attivazione. Lasciali vuoti per usare il dispositivo già collegato o l'ultimo indirizzo.</span>
+      <label class="k">Visti da adb</label><div class="inline">${devs}</div>
+      <label class="k">Opzioni</label>
+      <div class="inline"><label class="opt"><input type="checkbox" name="ai" ${$('#opt-ai').checked ? 'checked' : ''}> con AI</label>
+        <label class="opt"><input type="checkbox" name="close" ${$('#opt-close').checked ? 'checked' : ''}> chiudi schede salvate</label></div>
+      <details class="box full"><summary>Primo abbinamento (solo la prima volta)</summary>
+        <p class="hint">Sul telefono: Debug wireless → "Abbina dispositivo con codice di accoppiamento". Usa la porta e il codice mostrati lì: la porta di abbinamento è diversa da quella di connessione.</p>
+        <div class="inline"><input type="number" id="pair-port" placeholder="porta abbinamento" style="width:160px">
+          <input type="text" id="pair-code" placeholder="codice (6 cifre)" inputmode="numeric" maxlength="6" style="width:150px" autocomplete="off">
+          <button type="button" id="pair-btn">Abbina</button><span id="pair-res" class="res"></span></div>
+      </details>
+    </div>`,
+    validate: (form) => {
+      const i = form.elements.ip.value.trim();
+      const p = form.elements.port.value.trim();
+      if (!i && !p) return null;
+      if (!i || !p) return 'Indica sia IP sia porta, oppure lasciali vuoti entrambi.';
+      if (!/^[A-Za-z0-9.-]+$/.test(i)) return 'IP non valido.';
+      if (!(Number(p) >= 1 && Number(p) <= 65535)) return 'Porta non valida (1-65535).';
+      return null;
+    },
+    onOpen: (d) => {
+      const ipEl = d.querySelector('#ph-ip');
+      const portEl = d.querySelector('#ph-port');
+      d.querySelectorAll('[data-dev]').forEach((b) => b.addEventListener('click', () => {
+        const [i, p] = splitHostPort(b.dataset.dev);
+        if (i) { ipEl.value = i; portEl.value = p; }
+      }));
+      d.querySelector('#ph-test').addEventListener('click', async () => {
+        const res = d.querySelector('#ph-res');
+        const serial = ipEl.value.trim() && portEl.value.trim() ? `${ipEl.value.trim()}:${portEl.value.trim()}` : undefined;
+        setRes(res, true, 'Verifico…');
+        try {
+          const r = await runJob({ type: 'connect', serial });
+          setRes(res, true, `Connesso: ${r.model ?? r.serial}`);
+          const [i, p] = splitHostPort(r.serial);
+          if (i && !serial) { ipEl.value = i; portEl.value = p; }
+        } catch (e) { setRes(res, false, e.message.split('\n')[0]); }
+        loadStatus(true);
+      });
+      d.querySelector('#pair-btn').addEventListener('click', async () => {
+        const res = d.querySelector('#pair-res');
+        const pport = d.querySelector('#pair-port').value.trim();
+        const code = d.querySelector('#pair-code').value.trim();
+        if (!ipEl.value.trim() || !pport || !/^\d{6}$/.test(code)) return setRes(res, false, 'Servono IP (sopra), porta di abbinamento e codice di 6 cifre.');
+        setRes(res, true, 'Abbino…');
+        try {
+          await runJob({ type: 'pair', hostPort: `${ipEl.value.trim()}:${pport}`, code });
+          setRes(res, true, 'Abbinato: ora indica la porta di connessione e verifica.');
+        } catch (e) { setRes(res, false, e.message.split('\n')[0]); }
+      });
+    },
+  });
+  if (!fd) return;
+  const i = String(fd.get('ip') ?? '').trim();
+  const p = String(fd.get('port') ?? '').trim();
+  await syncFrom('phone', { serial: i && p ? `${i}:${p}` : undefined, ai: fd.get('ai') === 'on', close: fd.get('close') === 'on' });
+}
+
+async function syncFrom(source, { serial, ai = $('#opt-ai').checked, close = $('#opt-close').checked } = {}) {
   try {
     if (close) {
-      const p = await runJob({ type: 'close-preview', source });
+      const p = await runJob({ type: 'close-preview', source, serial });
       const keep = p.keep?.length ? `<p class="muted">Restano aperte:</p><ul>${p.keep.map((u) => `<li>${esc(u)}</li>`).join('')}</ul>` : '';
       const ok = await dialog({
         title: `Chiudere ${p.toClose} schede ${source === 'pc' ? 'in Chrome sul PC' : 'sul telefono'}?`,
@@ -347,7 +451,7 @@ async function syncFrom(source) {
       });
       if (!ok) return;
     }
-    const r = await runJob({ type: 'sync', source, ai, close });
+    const r = await runJob({ type: 'sync', source, serial, ai, close });
     toast(`${r.added} link nuovi salvati${close ? ` · ${r.closed} schede chiuse` : ''}`);
     await load();
   } catch (e) {
@@ -503,7 +607,7 @@ document.addEventListener('click', (ev) => {
   const act = t.closest('[data-act]')?.dataset.act;
   if (act) {
     ({
-      'sync-phone': () => syncFrom('phone'), 'sync-pc': () => syncFrom('pc'), check: () => check(false), 'check-links': () => check(true),
+      'sync-phone': () => phoneSync(), 'sync-pc': () => syncFrom('pc'), check: () => check(false), 'check-links': () => check(true),
       undo, trash: toggleTrash,
     })[act]?.();
     return;
