@@ -383,6 +383,9 @@ Principio comune: i comandi che **modificano** `links.md` toccano solo le righe 
 - **A – fatto** (`fd8dece`): `src/backup.js`, test in `test/backup.test.js`.
 - **B – fatto**: `pck retag` (`src/retag.js`). La logica AI comune a `sync` e `retag` è stata spostata in `src/describe.js`; il rilevamento della lingua è in `src/lang.js`; le funzioni per lavorare riga per riga (`entryLines`, `replaceLines`, `replaceTrailingTags`) sono in `src/markdown.js`.
   - Prova su una **copia** di `links.md` (`--tag da-smistare --empty --lang-mismatch`): 50 voci selezionate (49 della sezione 14/11), 50/50 rigenerate con LM Studio in 67 s, 50 righe cambiate e nessun'altra, 0 `#da-smistare` rimasti, backup creato. Il `links.md` reale non è stato modificato.
+- **C – fatto**: `pck tags` (`stats` di default, `rename`, `merge --into`, `remove`, tutti con `--dry-run`), codice in `src/tags.js`. Gli alias vengono salvati con `saveConfigPatch` (config locale se esiste, altrimenti quello utente). Anche i tag suggeriti dalle regole al vocabolario dell'AI passano dagli alias.
+  - Prova su una copia, in una cartella con il proprio `pck.config.json`: `rename informazioni info` (15 voci), `merge strumenti internet --into tecnologia` (19), `remove emulazione` (2): 34 righe cambiate, 3 backup (suffisso `-2` nello stesso secondo), alias scritti nel config locale, config utente invariato. Sul file reale solo `tags` (statistiche) e `rename --dry-run`.
+  - Difetti trovati e corretti durante la prova: un config salvato con **BOM UTF-8** (tipico di Blocco note/PowerShell) non veniva letto; un config non valido produceva uno stack trace invece di un messaggio.
 
 Note:
 - B usa la stessa pipeline AI di `sync` (lotti, vocabolario, indicazioni, divisione dei lotti). La scrittura sostituisce le righe una per una e non riordina il file.

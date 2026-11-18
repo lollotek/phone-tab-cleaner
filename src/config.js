@@ -137,7 +137,8 @@ export function merge(a, b) {
 
 function readJson(p) {
   try {
-    return JSON.parse(fs.readFileSync(p, 'utf8'));
+    // Su Windows editor e PowerShell salvano spesso con BOM UTF-8, che JSON.parse non accetta.
+    return JSON.parse(fs.readFileSync(p, 'utf8').replace(/^﻿/, ''));
   } catch (e) {
     if (e.code === 'ENOENT') return null;
     throw new PckError(`Config non valido (${p}): ${e.message}`);
@@ -150,6 +151,21 @@ export function loadConfig() {
   cfg = merge(cfg, readJson(path.resolve(LOCAL_CONFIG)) ?? {});
   if (process.env.PCK_ADB_PATH) cfg.adbPath = process.env.PCK_ADB_PATH;
   return cfg;
+}
+
+/**
+ * Salva una modifica di configurazione dove l'utente la tiene già: ./pck.config.json se esiste,
+ * altrimenti ~/.pck/config.json. @returns {string} percorso del file scritto
+ */
+export function saveConfigPatch(patch) {
+  const local = path.resolve(LOCAL_CONFIG);
+  if (fs.existsSync(local)) {
+    const cur = readJson(local) ?? {};
+    fs.writeFileSync(local, `${JSON.stringify(merge(cur, patch), null, 2)}\n`, 'utf8');
+    return local;
+  }
+  saveUserConfig(patch);
+  return USER_CONFIG;
 }
 
 export function saveUserConfig(patch) {

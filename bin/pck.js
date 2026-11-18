@@ -7,6 +7,7 @@ import { loadConfig, USER_CONFIG, LOCAL_CONFIG } from '../src/config.js';
 import { createLogger } from '../src/log.js';
 import { runSync } from '../src/sync.js';
 import { runRetag } from '../src/retag.js';
+import { mergeTags, removeTags, renameTag, showTagStats } from '../src/tags.js';
 import { PROVIDERS } from '../src/tagger/ai/index.js';
 import { cleanText, decodeEntities } from '../src/util.js';
 
@@ -31,12 +32,15 @@ function context() {
 }
 
 const action = (fn) => async (...args) => {
-  const ctx = context();
+  let log = createLogger(program.opts().verbose);
   try {
+    // Anche gli errori di configurazione (es. JSON non valido) devono arrivare come messaggio, non come stack trace.
+    const ctx = context();
+    log = ctx.log;
     await fn(ctx, ...args);
   } catch (e) {
-    ctx.log.error(e.message);
-    if (ctx.log.verbose && !e.exitCode) ctx.log.debug(e.stack);
+    log.error(e.message);
+    if (log.verbose && !e.exitCode) log.debug(e.stack);
     process.exitCode = e.exitCode ?? 1;
   }
 };
@@ -153,6 +157,45 @@ program
   .option('--dry-run', 'mostra prima/dopo senza modificare il file')
   .action(action(async ({ cfg, log }, opts) => {
     await runRetag({ cfg, log, opts });
+  }));
+
+const tags = program.command('tags').description('statistiche e gestione dei tag del file (rename, merge, remove)');
+
+tags
+  .command('stats', { isDefault: true })
+  .description('utilizzi per tag, tag usati una sola volta, coppie frequenti')
+  .option('-f, --file <path>', 'file markdown (default: config defaultFile)')
+  .option('--json', 'output JSON')
+  .action(action(async ({ cfg, log }, opts) => {
+    await showTagStats({ cfg, log, opts });
+  }));
+
+tags
+  .command('rename <vecchio> <nuovo>')
+  .description('rinomina un tag nel file e aggiunge l\'alias vecchio → nuovo nel config (se il nuovo esiste già, li accorpa)')
+  .option('-f, --file <path>', 'file markdown')
+  .option('--dry-run', 'mostra prima/dopo senza modificare file e config')
+  .action(action(async (ctx, from, to, opts) => {
+    await renameTag(from, to, { ...ctx, opts });
+  }));
+
+tags
+  .command('merge <tag...>')
+  .description('accorpa più tag in uno (--into), con alias nel config')
+  .requiredOption('--into <tag>', 'tag di destinazione')
+  .option('-f, --file <path>', 'file markdown')
+  .option('--dry-run', 'mostra prima/dopo senza modificare file e config')
+  .action(action(async (ctx, list, opts) => {
+    await mergeTags(list, opts.into, { ...ctx, opts });
+  }));
+
+tags
+  .command('remove <tag...>')
+  .description('toglie uno o più tag da tutte le voci')
+  .option('-f, --file <path>', 'file markdown')
+  .option('--dry-run', 'mostra prima/dopo senza modificare il file')
+  .action(action(async (ctx, list, opts) => {
+    await removeTags(list, { ...ctx, opts });
   }));
 
 program

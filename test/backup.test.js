@@ -10,6 +10,19 @@ async function tmpDir() {
   return fs.mkdtemp(path.join(os.tmpdir(), 'pck-backup-'));
 }
 
+test('config con BOM UTF-8 (tipico su Windows) viene letto', async () => {
+  const dir = await tmpDir();
+  await fs.writeFile(path.join(dir, 'pck.config.json'), '﻿{ "defaultFile": "./altro.md" }');
+  const { loadConfig } = await import('../src/config.js');
+  const cwd = process.cwd();
+  try {
+    process.chdir(dir);
+    assert.equal(loadConfig().defaultFile, './altro.md');
+  } finally {
+    process.chdir(cwd);
+  }
+});
+
 test('stamp', () => {
   assert.equal(stamp(new Date(2026, 10, 18, 9, 5, 7)), '20261118-090507');
 });

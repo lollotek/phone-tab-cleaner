@@ -65,9 +65,14 @@ export async function describeWithAi(items, { cfg, opts, log, fileTags }) {
   const pcfg = cfg.ai.providers[name] ?? {};
 
   // Vocabolario: tag del file + tag previsti dalle regole (come suggerimenti), per coerenza fin dal primo uso.
+  // I suggerimenti passano dagli alias, così un tag rinominato con `pck tags rename` non viene riproposto.
+  const aliasOf = Object.fromEntries(Object.entries(cfg.tagRules.aliases ?? {}).map(([k, v]) => [slugTag(k), slugTag(v)]));
   const vocabulary = new Map(fileTags);
   for (const list of [...Object.values(cfg.tagRules.domains ?? {}), ...Object.values(cfg.tagRules.keywords ?? {})]) {
-    for (const t of list) if (!vocabulary.has(t)) vocabulary.set(t, 0);
+    for (const raw of list) {
+      const t = aliasOf[slugTag(raw)] ?? slugTag(raw);
+      if (!vocabulary.has(t)) vocabulary.set(t, 0);
+    }
   }
   // Indicazioni personali per l'AI (es. "se c'è cosplay aggiungi #cosplay"): file di testo libero.
   const instr = await loadInstructions(opts.instructions ?? cfg.ai.instructionsFile, { explicit: Boolean(opts.instructions) });

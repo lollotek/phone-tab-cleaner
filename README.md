@@ -92,6 +92,22 @@ pck retag --all --url github.com --ai claude
 
 Filtri sui problemi (basta che una voce ne soddisfi uno): `--tag <tag>`, `--empty` (senza descrizione), `--lang-mismatch` (descrizione non nella lingua configurata; riconosce italiano e inglese), `--all`. Filtri sull'ambito (devono valere tutti): `--section <titolo>`, `--url <testo>`, `--limit <n>`. Le pagine di ricerca non vengono rigenerate. Se l'AI non riesce su una voce, quella voce resta com'è.
 
+## Gestire i tag (`pck tags`)
+
+```bash
+pck tags                                         # statistiche: utilizzi, tag usati una volta, coppie frequenti (--json)
+pck tags rename informazioni info --dry-run      # anteprima prima/dopo
+pck tags rename informazioni info
+pck tags merge strumenti internet --into tecnologia
+pck tags remove emulazione
+```
+
+- Si modificano solo i tag finali delle voci; descrizioni, URL (anche con `#frammento`) e testo libero restano intatti.
+- `rename` e `merge` aggiungono l'**alias** vecchio → nuovo nel config (`./pck.config.json` se esiste, altrimenti `~/.pck/config.json`), così regole e AI non ricreano il vecchio nome. Se rinomini `da-smistare` o `ricerca`, viene aggiornato anche `fallbackTag` / `searchTag`.
+- `rename` verso un tag che esiste già equivale a un accorpamento: nella stessa voce non compaiono doppioni.
+- `remove` non crea alias e segnala le voci rimaste senza tag.
+- Se `pck.prompt.md` cita il vecchio tag viene mostrato un avviso, perché è testo libero e va aggiornato a mano.
+
 ## Backup
 
 Prima di ogni modifica di `links.md` il tool ne salva una copia in `.pck-backup/` (es. `links-20261118-101500.md`) e conserva le ultime 10. Il numero si cambia con `"backup": { "keep": 20 }` nel config. Per ripristinare basta copiare il backup al posto di `links.md`; se la cartella è sotto git, si può usare anche `git checkout links.md`.
