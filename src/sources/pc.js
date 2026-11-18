@@ -139,6 +139,9 @@ export async function openPcSource({ cfg, log }) {
       const { targetInfos } = await cdp.send('Target.getTargets');
       return pagesFromTargets(targetInfos);
     },
+    async openTab(url) {
+      await cdp.send('Target.createTarget', { url, background: true });
+    },
     async closeTab(id) {
       const { success } = await cdp.send('Target.closeTarget', { targetId: id });
       if (success === false) throw new Error('Chrome ha rifiutato la chiusura');

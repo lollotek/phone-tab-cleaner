@@ -17,9 +17,11 @@ import { readTextIfExists, shortPath, writeAtomic } from './util.js';
  * Ambito (in AND): section, url. Problemi (in OR): tags, empty, langMismatch; oppure all.
  * Le pagine di ricerca sono escluse: la loro descrizione viene dalla query, per scelta.
  */
-export function selectForRetag(rows, { tags = [], empty = false, langMismatch = false, all = false, section, url, lang = 'it' }) {
+export function selectForRetag(rows, { tags = [], empty = false, langMismatch = false, all = false, section, url, keys, normalize, lang = 'it' }) {
   const wanted = tags.map(slugTag);
   return rows.filter(({ section: sec, entry: e }) => {
+    // keys: voci scelte una per una (dall'interfaccia), per URL normalizzato.
+    if (keys && !keys.has(normalize(e.url))) return false;
     if (section && !(sec ?? '').toLowerCase().startsWith(section.toLowerCase())) return false;
     if (url && !e.url.toLowerCase().includes(url.toLowerCase())) return false;
     if (classifyUrl(e.url).search) return false;
@@ -38,7 +40,7 @@ export async function runRetag({ cfg, log, opts }) {
   const parsed = parseLinksFile(text, normalize);
   const lang = opts.lang ?? cfg.description.language;
 
-  const filters = { tags: opts.tag ?? [], empty: Boolean(opts.empty), langMismatch: Boolean(opts.langMismatch), all: Boolean(opts.all), section: opts.section, url: opts.url, lang };
+  const filters = { tags: opts.tag ?? [], empty: Boolean(opts.empty), langMismatch: Boolean(opts.langMismatch), all: Boolean(opts.all || opts.keys), section: opts.section, url: opts.url, keys: opts.keys, normalize, lang };
   if (!filters.tags.length && !filters.empty && !filters.langMismatch && !filters.all) {
     throw new PckError('Indica quali voci rigenerare: --tag <tag>, --empty, --lang-mismatch oppure --all (eventualmente con --section / --url).');
   }

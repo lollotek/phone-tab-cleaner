@@ -11,6 +11,9 @@ import { openPcSource } from './pc.js';
 
 export const SOURCES = ['phone', 'pc'];
 
+/** Quoting per la shell remota di `adb shell` (gli argomenti vengono uniti e interpretati da sh). */
+export const shellQuote = (s) => `'${String(s).replace(/'/g, "'\\''")}'`;
+
 async function openPhoneSource({ adb, cfg, log, opts }) {
   const dev = await resolveDevice(adb, cfg, opts, log);
   log.ok(`Connesso a ${dev.serial}${dev.model ? ` (${dev.model})` : ''}`);
@@ -18,7 +21,10 @@ async function openPhoneSource({ adb, cfg, log, opts }) {
     kind: 'phone',
     label: 'Chrome (telefono)',
     retryHint: 'Riconnetti il telefono e riprova con: pck sync --close (i link già salvati non vengono riscritti)',
-    withTabs: (fn) => withDevtools(adb, dev.serial, cfg, fn, log),
+    // openTab: apre un URL in Chrome sul telefono con un intent VIEW (funziona anche se Chrome è chiuso).
+    withTabs: (fn) => withDevtools(adb, dev.serial, cfg, (dt, version) => fn(Object.assign(dt, {
+      openTab: (url) => adb.run(['shell', 'am', 'start', '-a', 'android.intent.action.VIEW', '-d', shellQuote(url), cfg.chromePackage], { serial: dev.serial }),
+    }), version), log),
     dispose: async () => {},
   };
 }

@@ -9,6 +9,7 @@ import { runSync } from '../src/sync.js';
 import { runRetag } from '../src/retag.js';
 import { mergeTags, removeTags, renameTag, showTagStats } from '../src/tags.js';
 import { runCheck } from '../src/check.js';
+import { startUi } from '../src/ui/server.js';
 import { PROVIDERS } from '../src/tagger/ai/index.js';
 import { cleanText, decodeEntities } from '../src/util.js';
 
@@ -209,6 +210,16 @@ program
   .option('--json', 'output JSON')
   .action(action(async ({ cfg, log }, opts) => {
     await runCheck({ cfg, log, opts });
+  }));
+
+program
+  .command('ui')
+  .description('interfaccia web locale: elenco, ricerca, modifica dei tag, cestino e funzioni del tool')
+  .option('-f, --file <path>', 'file markdown (default: config defaultFile)')
+  .option('--port <n>', 'porta (default 4317, esclusa da sync e chiusura)')
+  .option('--no-open', 'non aprire il browser')
+  .action(action(async ({ cfg, adb, log }, opts) => {
+    await startUi({ cfg, adb, log, opts });
   }));
 
 program
