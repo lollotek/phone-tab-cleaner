@@ -1,5 +1,93 @@
 <!doctype html>
 <html lang="it">
-<head><meta charset="utf-8"><title>PhoneCleanKit</title></head>
-<body><p>Interfaccia in preparazione.</p></body>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>PhoneCleanKit</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <strong>PhoneCleanKit</strong>
+      <span id="fileinfo" class="muted"></span>
+    </div>
+    <div class="status" id="status" aria-live="polite">
+      <span class="pill" id="st-ai" title="">AI …</span>
+      <span class="pill" id="st-phone" title="">Telefono …</span>
+      <span class="pill" id="st-pc" title="">Chrome PC …</span>
+    </div>
+  </header>
+
+  <section class="toolbar" aria-label="Funzioni">
+    <button data-act="sync-phone" title="Legge le schede di Chrome sul telefono e salva quelle nuove">Sync telefono</button>
+    <button data-act="sync-pc" title="Legge le schede di Chrome sul PC e salva quelle nuove">Sync PC</button>
+    <label class="opt"><input type="checkbox" id="opt-ai" checked> con AI</label>
+    <label class="opt"><input type="checkbox" id="opt-close"> chiudi schede salvate</label>
+    <span class="grow"></span>
+    <button data-act="check" title="Controlla il file: righe malformate, doppioni, voci senza tag o descrizione">Controlla</button>
+    <button data-act="check-links" title="Controlla anche i link morti (una richiesta per voce)">Controlla link</button>
+    <button data-act="undo" title="Rimette il file com'era prima dell'ultima modifica (dal backup)">Annulla ultima</button>
+    <button data-act="trash" id="btn-trash" aria-pressed="false">Cestino</button>
+  </section>
+
+  <section id="job" class="job" hidden>
+    <div class="job-head">
+      <span class="spinner" aria-hidden="true"></span>
+      <strong id="job-label"></strong>
+      <span id="job-last" class="muted ellipsis"></span>
+      <span class="grow"></span>
+      <button class="ghost small" id="job-toggle" aria-expanded="false">Log</button>
+    </div>
+    <pre id="job-log" hidden></pre>
+  </section>
+
+  <section class="filters" aria-label="Ricerca e filtri">
+    <input id="q" type="search" placeholder="Cerca nel testo, #tag per filtrare, -#tag per escludere   ( / )" autocomplete="off">
+    <select id="f-section" aria-label="Sezione"><option value="">Tutte le sezioni</option></select>
+    <label class="opt" id="f-problems-wrap" hidden><input type="checkbox" id="f-problems"> solo con problemi <span id="f-problems-n" class="muted"></span></label>
+  </section>
+  <div id="tagbar" class="tagbar" aria-label="Tag"></div>
+
+  <section id="bulk" class="bulk" aria-label="Azioni sulla selezione">
+    <strong id="bulk-n">Nessuna selezione</strong>
+    <span class="grow"></span>
+    <span id="bulk-list-actions">
+      <button data-bulk="add-tag">Aggiungi tag</button>
+      <button data-bulk="remove-tag">Togli tag</button>
+      <button data-bulk="retag">Rigenera con AI</button>
+      <button data-bulk="open-phone">Apri sul telefono</button>
+      <button data-bulk="open-pc">Apri sul PC</button>
+      <button data-bulk="delete" class="danger">Elimina</button>
+    </span>
+    <span id="bulk-trash-actions" hidden>
+      <button data-bulk="restore">Ripristina</button>
+    </span>
+    <button data-bulk="clear" class="ghost">Deseleziona</button>
+  </section>
+
+  <div class="listhead">
+    <label class="opt"><input type="checkbox" id="sel-all"> seleziona tutti i risultati</label>
+    <span class="grow"></span>
+    <span id="count" class="muted"></span>
+  </div>
+  <main id="list" aria-live="polite"></main>
+
+  <div id="toasts" class="toasts" aria-live="assertive"></div>
+
+  <dialog id="dlg">
+    <form method="dialog" id="dlg-form">
+      <h2 id="dlg-title"></h2>
+      <div id="dlg-body"></div>
+      <div class="dlg-actions">
+        <!-- OK per primo nel DOM: è il pulsante che Invio attiva nel form; l'ordine a video lo inverte il CSS -->
+        <button value="ok" id="dlg-ok" class="primary">OK</button>
+        <button value="cancel" class="ghost" formnovalidate>Annulla</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/app.js" type="module"></script>
+</body>
 </html>
