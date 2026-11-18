@@ -1,0 +1,27 @@
+{
+  "name": "phonecleankit",
+  "version": "0.1.0",
+  "description": "Salva le schede Chrome aperte sul telefono Android (via adb wireless) in un file Markdown con descrizione e tag.",
+  "type": "module",
+  "bin": {
+    "pck": "bin/pck.js"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.js\"",
+    "spike": "node scripts/spike-tabs.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "private": true,
+  "dependencies": {
+    "commander": "^12.1.0",
+    "node-html-parser": "^6.1.13",
+    "picocolors": "^1.1.1"
+  },
+  "optionalDependencies": {
+    "@anthropic-ai/sdk": "^1.9.0",
+    "@google/genai": "^3.4.0"
+  }
+}
